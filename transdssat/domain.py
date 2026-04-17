@@ -74,9 +74,10 @@ class Trajectory:
     management_mode: str
     steps: list[TrajectoryStep]
     outcome: CropOutcome
+    policy: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "scenario_id": self.scenario_id,
             "engine_name": self.engine_name,
             "crop_name": self.crop_name,
@@ -85,3 +86,6 @@ class Trajectory:
             "steps": [step.to_dict() for step in self.steps],
             "outcome": self.outcome.to_dict(),
         }
+        if self.policy is not None:
+            payload["policy"] = self.policy
+        return payload

@@ -26,7 +26,7 @@ def main() -> int:
         "--engines",
         nargs="+",
         default=["wofost_proxy", "dssat_proxy"],
-        help="Backends to include, for example: wofost_proxy dssat_proxy pydssat",
+        help="Backends to include, for example: wofost_proxy dssat_proxy dssat_official",
     )
     args = parser.parse_args()
 

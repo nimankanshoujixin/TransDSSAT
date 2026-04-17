@@ -1,40 +1,77 @@
 # Backend Notes
 
-## Recommendation
+## Recommended backend
 
-Keep the repository backend-agnostic and use proxy environments for local development.
-Switch to a real DSSAT backend only on the server where the runtime can be controlled.
+Use the official DSSAT runtime as the high-fidelity backend:
 
-## `pyDSSAT`
+- [DSSAT/dssat-csm-os](https://github.com/DSSAT/dssat-csm-os)
+- [DSSAT/dssat-csm-data](https://github.com/DSSAT/dssat-csm-data)
 
-Pros:
+Keep the repository's proxy backends for local development and smoke tests.
 
-- Python-facing workflow
-- conceptually close to the current environment wrapper design
+## Why this repository uses a wrapper around official DSSAT
 
-Risks:
+The repository now assumes this division of responsibility:
 
-- public documentation describes a manual `f2py` wrapping workflow
-- examples are tied to DSSAT 4.5 style setup
-- not a drop-in modern package workflow
+- TransDSSAT:
+  - creates season-level water and nitrogen decisions,
+  - materializes a run workspace,
+  - launches DSSAT,
+  - parses `PlantGro.OUT`, `SoilWat.OUT`, `SoilNi.OUT`, and `Summary.OUT`,
+  - converts outputs into reward-bearing trajectories.
+- Server-side DSSAT runtime:
+  - contains the compiled DSSAT executable,
+  - contains crop-specific base experiment templates,
+  - optionally runs a preprocessing script to turn TransDSSAT manifests into final DSSAT input files.
 
-Use `pyDSSAT` only if the server owner is comfortable maintaining a DSSAT runtime and Python bindings together.
+This is more stable than binding the repository to an unofficial Python wrapper.
 
-## Official `pythia`
+## Required environment variables for the official backend
 
-Pros:
+- `DSSAT_HOME`: root of the DSSAT runtime on the server
+- `DSSAT_TEMPLATE_ROOT`: directory containing crop-specific base run templates
+- `DSSAT_RUN_COMMAND`: command template that executes one prepared run directory
 
-- official DSSAT Foundation Python package
-- better fit if you want a supported DSSAT-facing Python layer
+Optional:
 
-Risks:
+- `DSSAT_PREPROCESS_COMMAND`: command template that converts `transdssat_manifest.json` into final DSSAT input files before execution
+- `DSSAT_WORK_ROOT`: where per-run folders are created, default `data/dssat_runs`
+- `DSSAT_TIMEOUT_SECONDS`: run timeout, default `600`
 
-- still expects a working DSSAT installation underneath
-- environment constraints can be stricter than a lightweight pure-Python package
+Command templates can use:
 
-## Practical path for this repository
+- `{run_dir}`
+- `{manifest}`
+- `{policy}`
+- `{scenario}`
 
-1. design state/action/reward and dataset schema locally with proxy backends,
-2. validate trajectory quality and Transformer inputs,
-3. on the server, wire one real backend into `transdssat/environments/adapters.py`,
-4. keep the rest of the pipeline unchanged.
+## Practical template contract
+
+For each crop, place one validated base template directory under `DSSAT_TEMPLATE_ROOT`.
+
+Example:
+
+- `DSSAT_TEMPLATE_ROOT/wheat_quzhou_base/...`
+- `DSSAT_TEMPLATE_ROOT/maize_quzhou_base/...`
+
+When TransDSSAT evaluates a policy, it will:
+
+1. copy the selected template directory into a new run folder,
+2. write:
+   - `transdssat_manifest.json`
+   - `transdssat_scenario.json`
+   - `transdssat_soil.json`
+   - `transdssat_weather.csv`
+   - `transdssat_policy.tsv`
+3. run the optional preprocess command,
+4. run the DSSAT command,
+5. parse the generated output files.
+
+## What still must be customized on the server
+
+One server-side customization remains unavoidable:
+
+- either a crop template that is already runnable as copied,
+- or a preprocess script that reads `transdssat_manifest.json` and writes the final DSSAT experiment files expected by your DSSAT setup.
+
+That last mile depends on your cultivar files, weather file naming, soil file layout, and experiment template conventions.

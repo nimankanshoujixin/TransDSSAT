@@ -1,128 +1,218 @@
 # TransDSSAT
 
-This repository provides a minimal, extensible scaffold for:
+TransDSSAT is a crop-decision training scaffold built around one practical idea:
 
-- crop simulation interfaces aligned with WOFOST and DSSAT style workflows,
-- water and nitrogen decision trajectories for reinforcement learning or imitation learning,
-- small-scale, representative scenario generation for Quzhou-like conditions,
-- a Transformer policy skeleton that can be enabled once PyTorch is installed.
+- the model outputs season-level water and nitrogen actions,
+- the backend evaluates those actions,
+- the backend returns trajectory data and reward,
+- the resulting samples are used to train a decision model such as a Transformer.
 
-## What is implemented
+The repository supports two backend layers:
 
-The current version focuses on the first milestone: make the simulation and dataset pipeline runnable with the Python standard library only.
+- `wofost_proxy` / `dssat_proxy`: local proxy environments for fast development
+- `dssat_official`: a server-side wrapper around the official DSSAT runtime
 
-- `transdssat.scenarios`: representative weather years, soil, crop, and management scenario construction
-- `transdssat.environments.proxy`: WOFOST-like and DSSAT-like proxy environments with daily water/nitrogen dynamics
-- `transdssat.environments.adapters`: optional real-model adapter entrypoints, including `pyDSSAT`
-- `transdssat.dataset`: trajectory rollout, train/test split, and JSON dataset export
-- `transdssat.policy`: optional Transformer policy skeleton for supervised action prediction
+## Current framework
 
-The proxy environments are not replacements for the real WOFOST/DSSAT engines. They exist to:
+The codebase is now organized around season-level decision evaluation instead of only daily threshold rules.
 
-1. lock down the state, action, reward, and trajectory schema,
-2. generate an initial small-scale dataset before full model coupling,
-3. provide a stable interface so real engine adapters can be dropped in later.
+- `transdssat/scenarios.py`
+  Builds Quzhou-style scenarios: crop, soil, weather regime, budgets, planting date, cultivar code, and template name.
+- `transdssat/season.py`
+  Defines season policies as stage-based actions and provides the baseline policy generator.
+- `transdssat/environments/proxy.py`
+  Contains local proxy simulators for rapid iteration.
+- `transdssat/environments/adapters.py`
+  Contains the official DSSAT season backend wrapper.
+- `transdssat/dssat/inputs.py`
+  Writes a per-run DSSAT workspace and season policy files.
+- `transdssat/dssat/runner.py`
+  Launches the preprocess command and DSSAT command.
+- `transdssat/dssat/parser.py`
+  Parses `PlantGro.OUT`, `SoilWat.OUT`, `SoilNi.OUT`, and `Summary.OUT`.
+- `transdssat/dataset.py`
+  Converts evaluated policies into train/test datasets.
+- `transdssat/policy.py`
+  Contains the optional Transformer skeleton.
 
-## Git workflow
+## Decision format
 
-The project is intended to be versioned with Git and deployed by `git pull` on a server.
+The policy is season-level, not daily online control.
 
-Recommended flow:
+Each policy contains one action for each major stage:
 
-```bash
-git clone <your-remote-url>
-cd TransDSSAT
-python scripts/generate_dataset.py --output-dir data/generated --scenario-count 216
-```
+- `emergence`
+- `vegetative`
+- `reproductive`
+- `grain_fill`
 
-If you want the generated datasets tracked by Git, remove the corresponding lines from `.gitignore`. By default they are ignored because they can be regenerated.
+Each action has:
 
-## Backends
+- `date`
+- `day_index`
+- `irrigation_mm`
+- `nitrogen_kg_ha`
 
-Supported backend names:
+This matches DSSAT better than forcing a strict daily `step(action)` loop.
 
-- `wofost_proxy`
-- `dssat_proxy`
-- `pydssat`
+## Reward logic
 
-`pydssat` is treated as an optional real DSSAT backend. The adapter is prepared in this repository, but it requires a server-side installation of `pyDSSAT` and a valid DSSAT runtime.
+Reward is computed from:
 
-Current recommendation:
+- final yield
+- irrigation input cost
+- nitrogen input cost
+- average water stress
+- average nitrogen stress
+- per-step biomass growth shaping
 
-- use proxy backends for local schema design and fast sample generation,
-- use `pydssat` only on the server after its runtime is fully prepared.
+Proxy backends return the reward during the rollout.
 
-Why not hard-bind to `pyDSSAT` by default:
+The official DSSAT backend reconstructs daily states from output files, then computes the same reward family on top of parsed outputs.
 
-- its public docs describe a manual `f2py` wrapping workflow around DSSAT 4.5,
-- the documented install path assumes an existing DSSAT environment and source-level changes,
-- that makes it risky to treat as a portable dependency in this repository.
+## What can run immediately
 
-## State / action / reward design
-
-The default state emphasizes the signals relevant to water-fertilizer control:
-
-- soil moisture
-- root zone water
-- soil nitrogen
-- canopy cover
-- biomass
-- development stage
-- water stress
-- nitrogen stress
-- daily temperature
-- precipitation
-- reference evapotranspiration
-- solar radiation
-
-Actions:
-
-- irrigation in mm/day
-- nitrogen application in kg/ha/day
-
-Reward:
-
-- positive reward from biomass accumulation and final yield
-- penalties for irrigation, nitrogen cost, and water/nitrogen stress
-
-## Generate datasets
+You can run the proxy path right now with plain Python.
 
 ```bash
 python scripts/generate_dataset.py --output-dir data/generated --scenario-count 216
+python scripts/evaluate_season_policy.py --engine dssat_proxy --crop wheat --weather-regime normal
 ```
 
-Outputs:
+This produces:
 
 - `train.jsonl`
 - `test.jsonl`
 - `metadata.json`
 
-Each JSONL line stores one full trajectory with scenario metadata and daily transitions.
+The proxy path is the current zero-friction route for generating training data and validating the learning pipeline.
 
-To force a single backend:
+## Official DSSAT backend
+
+Recommended real backend:
+
+- [DSSAT/dssat-csm-os](https://github.com/DSSAT/dssat-csm-os)
+- [DSSAT/dssat-csm-data](https://github.com/DSSAT/dssat-csm-data)
+
+TransDSSAT does not try to replace DSSAT's own runtime. Instead it wraps it.
+
+### Server-side installation concept
+
+On the server you need:
+
+1. the official DSSAT runtime installed under `DSSAT_HOME`
+2. one template directory per crop under `DSSAT_TEMPLATE_ROOT`
+3. a `DSSAT_RUN_COMMAND` that can execute one prepared run directory
+4. optionally a `DSSAT_PREPROCESS_COMMAND` that converts the TransDSSAT manifest into final DSSAT experiment files
+
+Details are in `docs/backend-notes.md`.
+
+### What TransDSSAT writes before running DSSAT
+
+For each run, TransDSSAT creates a working directory and writes:
+
+- `transdssat_manifest.json`
+- `transdssat_scenario.json`
+- `transdssat_soil.json`
+- `transdssat_weather.csv`
+- `transdssat_policy.tsv`
+
+Then it:
+
+1. copies the crop template directory into that run directory
+2. runs the optional preprocess command
+3. runs the DSSAT command
+4. parses the resulting output files
+
+### Important limitation
+
+The repository now includes the official DSSAT wrapper and parser, but your server still needs one local customization:
+
+- either a ready-to-run crop template,
+- or a preprocess script that turns `transdssat_manifest.json` into the exact DSSAT input files used by your runtime.
+
+That final step depends on your actual DSSAT installation, cultivar files, template conventions, and weather/soil file layout.
+
+## Environment variables for the official backend
+
+Required:
+
+- `DSSAT_HOME`
+- `DSSAT_RUN_COMMAND`
+
+Usually required in practice:
+
+- `DSSAT_TEMPLATE_ROOT`
+
+Optional:
+
+- `DSSAT_PREPROCESS_COMMAND`
+- `DSSAT_WORK_ROOT`
+- `DSSAT_TIMEOUT_SECONDS`
+- `DSSAT_PRESERVE_RUN_DIRS`
+
+The command templates can reference:
+
+- `{run_dir}`
+- `{manifest}`
+- `{policy}`
+- `{scenario}`
+
+Example:
 
 ```bash
-python scripts/generate_dataset.py --output-dir data/generated --scenario-count 72 --engines pydssat
+export DSSAT_HOME=/opt/dssat
+export DSSAT_TEMPLATE_ROOT=/opt/transdssat/templates
+export DSSAT_PREPROCESS_COMMAND="python /opt/transdssat/scripts/render_dssat_inputs.py {manifest}"
+export DSSAT_RUN_COMMAND="/opt/dssat/bin/dscsm048"
+python scripts/evaluate_season_policy.py --engine dssat_official --crop wheat --weather-regime normal
 ```
 
-## Transformer policy
+## Dataset generation flow
 
-The Transformer implementation is optional and only activated when `torch` is available.
+The default dataset generation flow is:
+
+1. build Quzhou scenarios
+2. generate one baseline season policy per scenario
+3. evaluate that policy on the selected backend
+4. export trajectory data into train/test JSONL files
+
+Command:
+
+```bash
+python scripts/generate_dataset.py --output-dir data/generated --scenario-count 216 --engines wofost_proxy dssat_proxy
+```
+
+If the official backend is ready on the server:
+
+```bash
+python scripts/generate_dataset.py --output-dir data/generated_dssat --scenario-count 72 --engines dssat_official
+```
+
+## Transformer training
+
+The Transformer code is still optional and requires PyTorch.
+
+The current supervised-example loader treats each stage decision as one training target:
+
+- prefix state sequence up to the decision day
+- target irrigation and nitrogen dose for that stage
 
 ```bash
 python scripts/train_transformer.py --dataset data/generated/train.jsonl
 ```
 
-If PyTorch is missing, the script will explain the expected dependency instead of silently failing.
+If `torch` is missing, the script will stop with a clear message.
 
-## Server-side notes for `pyDSSAT`
+## Git and deployment
 
-If you decide to run the real DSSAT path on the server:
+The repository is designed for Git-based deployment.
 
-1. prepare a dedicated DSSAT runtime directory on the server,
-2. install or build `pyDSSAT` there,
-3. set `PYDSSAT_HOME` to that runtime directory,
-4. generate scenarios with `--engines pydssat`,
-5. adjust the adapter in `transdssat/environments/adapters.py` to match your actual cultivar, soil, weather, and file layout.
+Typical server flow:
 
-The current adapter intentionally fails fast with a clear error if `pyDSSAT` is not installed or the runtime directory is missing.
+```bash
+git pull
+python scripts/generate_dataset.py --output-dir data/generated --scenario-count 216
+```
+
+Generated datasets and DSSAT run directories are ignored by default in `.gitignore`.

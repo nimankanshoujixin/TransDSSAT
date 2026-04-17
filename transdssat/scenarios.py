@@ -58,6 +58,10 @@ class SimulationScenario:
     nitrogen_budget_kg_ha: float
     management_mode: str
     seed: int
+    planting_date: str = ""
+    cultivar_code: str = ""
+    template_name: str = ""
+    site_name: str = "quzhou"
 
 
 def quzhou_typical_soil() -> SoilProfile:
@@ -220,6 +224,9 @@ def build_quzhou_scenarios(
                                     nitrogen_budget_kg_ha=nitrogen_budget_kg_ha,
                                     management_mode=management_mode,
                                     seed=scenario_seed,
+                                    planting_date="2025-10-08" if crop_name == "wheat" else "2025-06-18",
+                                    cultivar_code="QM6-WH" if crop_name == "wheat" else "ZD958-MZ",
+                                    template_name=f"{crop_name}_quzhou_base",
                                 )
                             )
 

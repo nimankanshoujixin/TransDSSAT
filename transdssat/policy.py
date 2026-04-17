@@ -34,10 +34,25 @@ def iter_supervised_examples(dataset_path: str | Path) -> Iterable[tuple[list[li
     with Path(dataset_path).open("r", encoding="utf-8") as handle:
         for line in handle:
             trajectory = json.loads(line)
-            sequence = [encode_state(CropState(**step["state"])) for step in trajectory["steps"]]
+            steps = trajectory["steps"]
+            policy = trajectory.get("policy")
+            if policy and policy.get("actions"):
+                for action in policy["actions"]:
+                    day_index = int(action["day_index"])
+                    sequence = [
+                        encode_state(CropState(**step["state"]))
+                        for step in steps
+                        if int(step["state"]["day_index"]) <= day_index
+                    ]
+                    if not sequence:
+                        continue
+                    yield sequence, (action["irrigation_mm"], action["nitrogen_kg_ha"])
+                continue
+
+            sequence = [encode_state(CropState(**step["state"])) for step in steps]
             if not sequence:
                 continue
-            last_action = trajectory["steps"][-1]["action"]
+            last_action = steps[-1]["action"]
             yield sequence, (last_action["irrigation_mm"], last_action["nitrogen_kg_ha"])
 
 

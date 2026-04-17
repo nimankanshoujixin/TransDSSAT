@@ -8,6 +8,8 @@ torch
 numpy
 pandas
 
-# Optional DSSAT wrapper route:
-# pyDSSAT is not published as a standard modern package in the sources reviewed,
-# so install it on the server using its own documented workflow if you choose that path.
+# DSSAT itself is installed separately on the server.
+# Recommended backend:
+# - official DSSAT runtime from DSSAT/dssat-csm-os
+# - a template workspace or preprocessor script that turns TransDSSAT manifests
+#   into runnable DSSAT experiment files

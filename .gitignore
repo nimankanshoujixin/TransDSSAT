@@ -10,6 +10,7 @@ env/
 
 data/generated/
 data/generated_216/
+data/dssat_runs/
 *.log
 *.out
 *.tmp

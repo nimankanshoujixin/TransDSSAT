@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from transdssat.domain import CropAction, CropOutcome, CropState
-from transdssat.environments.adapters import PyDSSATEnvironment
 from transdssat.environments.base import CropEnvironment
 from transdssat.scenarios import SimulationScenario, stage_for_day
 
@@ -230,8 +229,6 @@ class ProxyCropEnvironment(CropEnvironment):
 
 
 def make_environment(scenario: SimulationScenario) -> CropEnvironment:
-    if scenario.engine_name == "pydssat":
-        return PyDSSATEnvironment(scenario=scenario)
     coefficients = PROXY_ENGINES.get(scenario.engine_name)
     if coefficients is None:
         raise ValueError(f"Unknown engine: {scenario.engine_name}")
