@@ -1,0 +1,13 @@
+# Optional server dependencies for running training and real-model adapters.
+# Install only what matches the server runtime you choose.
+
+# Training stack
+torch
+
+# Common scientific stack
+numpy
+pandas
+
+# Optional DSSAT wrapper route:
+# pyDSSAT is not published as a standard modern package in the sources reviewed,
+# so install it on the server using its own documented workflow if you choose that path.

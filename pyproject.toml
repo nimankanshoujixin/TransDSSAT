@@ -1,0 +1,9 @@
+[project]
+name = "transdssat"
+version = "0.1.0"
+description = "Lightweight crop simulation scaffolding for water-fertilizer decision datasets."
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
