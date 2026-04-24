@@ -148,10 +148,19 @@ def main() -> int:
     parser.add_argument("manifest", help="Path to transdssat_manifest.json")
     args = parser.parse_args()
 
-    manifest_path = Path(args.manifest).resolve()
+    manifest_path = Path(args.manifest)
+    if not manifest_path.is_absolute():
+        manifest_path = (Path.cwd() / manifest_path).resolve()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    run_dir = Path(manifest["run_dir"]).resolve()
-    policy_path = Path(manifest["policy_path"]).resolve()
+    manifest_dir = manifest_path.parent
+
+    run_dir = Path(manifest["run_dir"])
+    if not run_dir.is_absolute():
+        run_dir = (manifest_dir / run_dir.name).resolve()
+
+    policy_path = Path(manifest["policy_path"])
+    if not policy_path.is_absolute():
+        policy_path = (run_dir / policy_path.name).resolve()
 
     experiment_path = find_experiment_file(run_dir)
     policy = parse_policy(policy_path)
