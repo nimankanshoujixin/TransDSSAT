@@ -27,25 +27,28 @@ class DSSATInputBuilder:
         self.config = config
 
     def build(self, scenario: SimulationScenario, policy: SeasonPolicy) -> DSSATRunContext:
-        self.config.working_root.mkdir(parents=True, exist_ok=True)
-        run_dir = self.config.working_root / policy.policy_id
+        working_root = self.config.working_root.resolve()
+        working_root.mkdir(parents=True, exist_ok=True)
+        run_dir = (working_root / policy.policy_id).resolve()
         if run_dir.exists():
             shutil.rmtree(run_dir)
         run_dir.mkdir(parents=True, exist_ok=True)
 
         template_dir = None
         if self.config.template_root is not None:
-            template_dir = self.config.template_root / (scenario.template_name or scenario.crop_spec.crop_name)
+            template_dir = (
+                self.config.template_root.resolve() / (scenario.template_name or scenario.crop_spec.crop_name)
+            )
             if template_dir.exists():
                 self._copy_tree(template_dir, run_dir)
             else:
                 template_dir = None
 
-        policy_path = run_dir / "transdssat_policy.tsv"
-        weather_path = run_dir / "transdssat_weather.csv"
-        soil_path = run_dir / "transdssat_soil.json"
-        scenario_path = run_dir / "transdssat_scenario.json"
-        manifest_path = run_dir / "transdssat_manifest.json"
+        policy_path = (run_dir / "transdssat_policy.tsv").resolve()
+        weather_path = (run_dir / "transdssat_weather.csv").resolve()
+        soil_path = (run_dir / "transdssat_soil.json").resolve()
+        scenario_path = (run_dir / "transdssat_scenario.json").resolve()
+        manifest_path = (run_dir / "transdssat_manifest.json").resolve()
 
         self._write_policy(policy_path, policy)
         self._write_weather(weather_path, scenario)
