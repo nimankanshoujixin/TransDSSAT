@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 
 from transdssat.domain import CropOutcome, CropState
 from transdssat.scenarios import SimulationScenario, stage_for_day
@@ -34,7 +35,7 @@ class ParsedDSSATOutputs:
 
 class DSSATOutputParser:
     def parse(self, run_dir: Path, scenario: SimulationScenario, run_number: int = 1) -> ParsedDSSATOutputs:
-        summary_rows = self.parse_table(run_dir / "Summary.OUT")
+        summary_rows = self.parse_table(run_dir / "Summary.OUT", fixed_width=True)
         plant_rows = self.parse_table(run_dir / "PlantGro.OUT", run_number=run_number)
         soil_water_rows = self.parse_table(run_dir / "SoilWat.OUT", run_number=run_number)
         soil_n_rows = self.parse_table(run_dir / "SoilNi.OUT", run_number=run_number)
@@ -61,13 +62,19 @@ class DSSATOutputParser:
             avg_nitrogen_stress=avg_nitrogen_stress,
         )
 
-    def parse_table(self, path: Path, run_number: int | None = None) -> list[dict[str, str]]:
+    def parse_table(
+        self,
+        path: Path,
+        run_number: int | None = None,
+        fixed_width: bool = False,
+    ) -> list[dict[str, str]]:
         if not path.exists():
             return []
         rows: list[dict[str, str]] = []
         columns: list[str] | None = None
         current_run: int | None = None
         has_run_sections = False
+        slices: list[tuple[str, int, int | None]] | None = None
 
         for raw_line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
             line = raw_line.rstrip()
@@ -80,16 +87,23 @@ class DSSATOutputParser:
                     has_run_sections = True
                 continue
             if line.startswith("@"):
-                columns = line[1:].split()
+                if fixed_width:
+                    slices = self._header_slices(line[1:])
+                    columns = [name for name, _, _ in slices]
+                else:
+                    columns = line[1:].split()
                 continue
             if columns is None or line.startswith("*") or line.startswith("!"):
                 continue
             if run_number is not None and has_run_sections and current_run != run_number:
                 continue
-            values = line.split()
-            if len(values) < len(columns):
-                values.extend([""] * (len(columns) - len(values)))
-            rows.append(dict(zip(columns, values[: len(columns)])))
+            if fixed_width and slices is not None:
+                rows.append(self._parse_fixed_width_row(line, slices))
+            else:
+                values = line.split()
+                if len(values) < len(columns):
+                    values.extend([""] * (len(columns) - len(values)))
+                rows.append(dict(zip(columns, values[: len(columns)])))
         return rows
 
     def _build_daily_states(
@@ -185,6 +199,26 @@ class DSSATOutputParser:
         if len(tokens) < 2:
             return None
         return int(tokens[1]) if tokens[1].isdigit() else None
+
+    def _header_slices(self, header: str) -> list[tuple[str, int, int | None]]:
+        matches = list(re.finditer(r"\S+", header))
+        slices: list[tuple[str, int, int | None]] = []
+        for index, match in enumerate(matches):
+            name = match.group(0)
+            start = match.start()
+            end = matches[index + 1].start() if index + 1 < len(matches) else None
+            slices.append((name, start, end))
+        return slices
+
+    def _parse_fixed_width_row(
+        self,
+        row: str,
+        slices: list[tuple[str, int, int | None]],
+    ) -> dict[str, str]:
+        parsed: dict[str, str] = {}
+        for name, start, end in slices:
+            parsed[name] = row[start:end].strip() if end is not None else row[start:].strip()
+        return parsed
 
     def _parse_outcome(
         self,
