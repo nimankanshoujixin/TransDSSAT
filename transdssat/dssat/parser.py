@@ -33,11 +33,11 @@ class ParsedDSSATOutputs:
 
 
 class DSSATOutputParser:
-    def parse(self, run_dir: Path, scenario: SimulationScenario) -> ParsedDSSATOutputs:
+    def parse(self, run_dir: Path, scenario: SimulationScenario, run_number: int = 1) -> ParsedDSSATOutputs:
         summary_rows = self.parse_table(run_dir / "Summary.OUT")
-        plant_rows = self.parse_table(run_dir / "PlantGro.OUT")
-        soil_water_rows = self.parse_table(run_dir / "SoilWat.OUT")
-        soil_n_rows = self.parse_table(run_dir / "SoilNi.OUT")
+        plant_rows = self.parse_table(run_dir / "PlantGro.OUT", run_number=run_number)
+        soil_water_rows = self.parse_table(run_dir / "SoilWat.OUT", run_number=run_number)
+        soil_n_rows = self.parse_table(run_dir / "SoilNi.OUT", run_number=run_number)
 
         daily_states = self._build_daily_states(
             scenario=scenario,
@@ -45,7 +45,7 @@ class DSSATOutputParser:
             soil_water_rows=soil_water_rows,
             soil_n_rows=soil_n_rows,
         )
-        outcome = self._parse_outcome(summary_rows, scenario, daily_states)
+        outcome = self._parse_outcome(summary_rows, scenario, daily_states, run_number=run_number)
         avg_water_stress = round(
             sum(state.water_stress for state in daily_states) / max(1, len(daily_states)),
             6,
@@ -61,19 +61,30 @@ class DSSATOutputParser:
             avg_nitrogen_stress=avg_nitrogen_stress,
         )
 
-    def parse_table(self, path: Path) -> list[dict[str, str]]:
+    def parse_table(self, path: Path, run_number: int | None = None) -> list[dict[str, str]]:
         if not path.exists():
             return []
         rows: list[dict[str, str]] = []
         columns: list[str] | None = None
+        current_run: int | None = None
+        has_run_sections = False
+
         for raw_line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
             line = raw_line.rstrip()
             if not line:
+                continue
+            if line.startswith("*RUN"):
+                parsed_run = self._parse_run_header(line)
+                if parsed_run is not None:
+                    current_run = parsed_run
+                    has_run_sections = True
                 continue
             if line.startswith("@"):
                 columns = line[1:].split()
                 continue
             if columns is None or line.startswith("*") or line.startswith("!"):
+                continue
+            if run_number is not None and has_run_sections and current_run != run_number:
                 continue
             values = line.split()
             if len(values) < len(columns):
@@ -169,15 +180,24 @@ class DSSATOutputParser:
                 return max(0, int(value))
         return fallback_index
 
+    def _parse_run_header(self, line: str) -> int | None:
+        tokens = line.split()
+        if len(tokens) < 2:
+            return None
+        return int(tokens[1]) if tokens[1].isdigit() else None
+
     def _parse_outcome(
         self,
         summary_rows: list[dict[str, str]],
         scenario: SimulationScenario,
         states: list[CropState],
+        run_number: int,
     ) -> CropOutcome:
-        summary = summary_rows[-1] if summary_rows else {}
+        summary = self._select_summary_row(summary_rows, run_number)
         yield_kg_ha = _first_float(summary, ("HWAM", "GWAM", "HWAH"), 0.0)
         biomass_kg_ha = _first_float(summary, ("CWAM", "VWAM", "BIOMAS"), states[-1].biomass_kg_ha)
+        if biomass_kg_ha > max(100000.0, states[-1].biomass_kg_ha * 10.0):
+            biomass_kg_ha = states[-1].biomass_kg_ha
         irrigation = _first_float(summary, ("IRCM", "TOTIR", "IRRAMT"), 0.0)
         nitrogen = _first_float(summary, ("NICM", "AMTNIT", "TOTN"), 0.0)
         if irrigation <= 0.0:
@@ -193,3 +213,12 @@ class DSSATOutputParser:
             nitrogen_use_efficiency=round(yield_kg_ha / max(1.0, nitrogen + 1.0), 5),
             cumulative_reward=0.0,
         )
+
+    def _select_summary_row(self, summary_rows: list[dict[str, str]], run_number: int) -> dict[str, str]:
+        if not summary_rows:
+            return {}
+        for row in summary_rows:
+            value = _to_float(row.get("RUNNO"))
+            if value is not None and int(value) == run_number:
+                return row
+        return summary_rows[0]
