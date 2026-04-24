@@ -172,6 +172,7 @@ Current repository support:
 
 - `scripts/render_dssat_inputs.py` can inject TransDSSAT season policies into a copied DSSAT experiment template
 - the current implementation is aimed at the stock maize template path already used on the server and rewrites treatment 1 irrigation and fertilizer events
+- when multiple experiment files exist in one copied template directory, the preprocessor prefers the experiment file referenced by `DSSAT_RUN_COMMAND`
 
 ## Dataset generation flow
 

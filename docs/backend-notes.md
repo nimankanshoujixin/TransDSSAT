@@ -80,4 +80,5 @@ Current repository status:
 
 - `scripts/render_dssat_inputs.py` now provides a first working policy-injection path for the copied maize experiment template already used in server validation
 - it rewrites treatment 1 irrigation and inorganic fertilizer events from `transdssat_policy.tsv`
+- when a copied template contains multiple experiment files, it prefers the experiment file named in `DSSAT_RUN_COMMAND`
 - this is a practical bridge from "template runs" to "policy-driven runs", even though full Quzhou-specific cultivar, soil, and weather rendering still remains to be completed

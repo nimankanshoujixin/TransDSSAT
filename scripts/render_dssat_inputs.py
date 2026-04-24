@@ -4,7 +4,9 @@ import argparse
 from dataclasses import dataclass
 from datetime import date, timedelta
 import json
+import os
 from pathlib import Path
+import shlex
 
 
 @dataclass(slots=True)
@@ -49,10 +51,36 @@ def date_to_yyddd(value: date) -> str:
     return f"{year:02d}{doy:03d}"
 
 
+def preferred_experiment_name() -> str | None:
+    explicit = os.environ.get("DSSAT_EXPERIMENT_FILE", "").strip()
+    if explicit:
+        return Path(explicit).name
+
+    run_command = os.environ.get("DSSAT_RUN_COMMAND", "").strip()
+    if not run_command:
+        return None
+
+    tokens = shlex.split(run_command, posix=os.name != "nt")
+    if not tokens:
+        return None
+
+    candidate = Path(tokens[-1]).name
+    if candidate.upper().endswith((".MZX", ".WHX")):
+        return candidate
+    return None
+
+
 def find_experiment_file(run_dir: Path) -> Path:
     candidates = sorted(run_dir.glob("*.MZX")) + sorted(run_dir.glob("*.WHX"))
     if not candidates:
         raise RuntimeError(f"No DSSAT experiment file (*.MZX or *.WHX) found in {run_dir}")
+
+    preferred = preferred_experiment_name()
+    if preferred:
+        preferred_path = run_dir / preferred
+        if preferred_path.exists():
+            return preferred_path
+
     return candidates[0]
 
 
