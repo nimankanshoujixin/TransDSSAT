@@ -123,6 +123,9 @@ Optional:
 - official DSSAT runner scaffold
 - server-side DSSAT compilation and runtime assembly
 - first successful `TransDSSAT -> official DSSAT` execution path
+- season policy injection into DSSAT maize template
+- scenario weather injection into DSSAT weather files
+- differentiated real-DSSAT maize results under dry / normal / wet representative years
 
 ### In progress
 

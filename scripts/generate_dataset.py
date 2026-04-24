@@ -28,11 +28,18 @@ def main() -> int:
         default=["wofost_proxy", "dssat_proxy"],
         help="Backends to include, for example: wofost_proxy dssat_proxy dssat_official",
     )
+    parser.add_argument(
+        "--crops",
+        nargs="+",
+        default=None,
+        help="Optional crop filter, for example: maize wheat",
+    )
     args = parser.parse_args()
 
     scenarios = build_quzhou_scenarios(
         target_count=args.scenario_count,
         engines=tuple(args.engines),
+        crops_filter=tuple(args.crops) if args.crops else None,
     )
     bundle = generate_dataset_bundle(scenarios)
     metadata = save_dataset_bundle(args.output_dir, bundle)

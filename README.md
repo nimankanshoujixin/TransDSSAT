@@ -189,6 +189,12 @@ Command:
 python scripts/generate_dataset.py --output-dir data/generated --scenario-count 216 --engines wofost_proxy dssat_proxy
 ```
 
+To restrict generation to one crop:
+
+```bash
+python scripts/generate_dataset.py --output-dir data/generated_dssat_maize --scenario-count 6 --engines dssat_official --crops maize
+```
+
 If the official backend is ready on the server:
 
 ```bash

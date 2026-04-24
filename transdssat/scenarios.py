@@ -184,9 +184,13 @@ def build_representative_weather(
 def build_quzhou_scenarios(
     target_count: int = 216,
     engines: tuple[str, ...] = ("wofost_proxy", "dssat_proxy"),
+    crops_filter: tuple[str, ...] | None = None,
 ) -> list[SimulationScenario]:
     soil = quzhou_typical_soil()
     crops = build_crop_specs()
+    if crops_filter:
+        allowed = set(crops_filter)
+        crops = {name: spec for name, spec in crops.items() if name in allowed}
     scenarios: list[SimulationScenario] = []
     weather_regimes = ("dry", "normal", "wet")
     irrigation_budgets = (90.0, 150.0, 210.0)
