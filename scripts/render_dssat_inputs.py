@@ -195,7 +195,6 @@ def build_weather_file(
             return weather_rows[-1]
         return weather_rows[offset]
 
-    planting_doy = int(planting_yyddd[2:])
     lines = [
         "*WEATHER DATA : TransDSSAT generated weather",
         "",
@@ -203,14 +202,18 @@ def build_weather_file(
         f"  {station_code:<4} {latitude:7.3f} {longitude:9.3f} {int(elevation):5d} {tav:5.1f} {amp:5.1f}  2.00  3.00",
         "@DATE  SRAD  TMAX  TMIN  RAIN               PAR ",
     ]
-    for doy in range(1, 366):
-        offset = doy - planting_doy
+    end_date = date(planting.year + 1, 12, 31)
+    current = date(planting.year, 1, 1)
+    while current <= end_date:
+        offset = (current - planting).days
         weather = row_for_offset(offset)
         par = weather.radiation_mj_m2 * 2.1
+        yyddd = date_to_yyddd(current)
         lines.append(
-            f"{weather_year:02d}{doy:03d} {weather.radiation_mj_m2:5.1f} {weather.tmax_c:5.1f} "
+            f"{yyddd} {weather.radiation_mj_m2:5.1f} {weather.tmax_c:5.1f} "
             f"{weather.tmin_c:5.1f} {weather.precipitation_mm:5.1f}              {par:5.1f} "
         )
+        current += timedelta(days=1)
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path

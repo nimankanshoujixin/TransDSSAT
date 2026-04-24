@@ -17,12 +17,24 @@ def _to_float(value: str | None) -> float | None:
         return None
 
 
+def _is_missing(value: float | None) -> bool:
+    return value is None or value <= -90.0
+
+
 def _first_float(row: dict[str, str], keys: tuple[str, ...], default: float) -> float:
     for key in keys:
         value = _to_float(row.get(key))
         if value is not None:
             return value
     return default
+
+
+def _first_present_float(row: dict[str, str], keys: tuple[str, ...]) -> float | None:
+    for key in keys:
+        value = _to_float(row.get(key))
+        if not _is_missing(value):
+            return value
+    return None
 
 
 @dataclass(slots=True)
@@ -46,7 +58,13 @@ class DSSATOutputParser:
             soil_water_rows=soil_water_rows,
             soil_n_rows=soil_n_rows,
         )
-        outcome = self._parse_outcome(summary_rows, scenario, daily_states, run_number=run_number)
+        outcome = self._parse_outcome(
+            summary_rows,
+            scenario,
+            daily_states,
+            plant_rows,
+            run_number=run_number,
+        )
         avg_water_stress = round(
             sum(state.water_stress for state in daily_states) / max(1, len(daily_states)),
             6,
@@ -225,15 +243,26 @@ class DSSATOutputParser:
         summary_rows: list[dict[str, str]],
         scenario: SimulationScenario,
         states: list[CropState],
+        plant_rows: list[dict[str, str]],
         run_number: int,
     ) -> CropOutcome:
         summary = self._select_summary_row(summary_rows, run_number)
-        yield_kg_ha = _first_float(summary, ("HWAM", "GWAM", "HWAH"), 0.0)
-        biomass_kg_ha = _first_float(summary, ("CWAM", "VWAM", "BIOMAS"), states[-1].biomass_kg_ha)
+        final_plant_row = plant_rows[-1] if plant_rows else {}
+        yield_kg_ha = _first_present_float(summary, ("HWAM", "GWAM", "HWAH"))
+        if yield_kg_ha is None:
+            yield_kg_ha = self._plant_state_value(final_plant_row, ("HWAD", "GWAD", "PWAD"), 0.0)
+
+        biomass_kg_ha = _first_present_float(summary, ("CWAM", "VWAM", "BWAH", "PWAM", "BIOMAS"))
+        if biomass_kg_ha is None:
+            biomass_kg_ha = self._plant_state_value(final_plant_row, ("TWAD", "CWAD", "VWAD", "SDWAD"), states[-1].biomass_kg_ha)
         if biomass_kg_ha > max(100000.0, states[-1].biomass_kg_ha * 10.0):
             biomass_kg_ha = states[-1].biomass_kg_ha
-        irrigation = _first_float(summary, ("IRCM", "TOTIR", "IRRAMT"), 0.0)
-        nitrogen = _first_float(summary, ("NICM", "AMTNIT", "TOTN"), 0.0)
+        irrigation = _first_present_float(summary, ("IRCM", "TOTIR", "IRRAMT"))
+        if irrigation is None:
+            irrigation = 0.0
+        nitrogen = _first_present_float(summary, ("NICM", "AMTNIT", "TOTN"))
+        if nitrogen is None:
+            nitrogen = 0.0
         if irrigation <= 0.0:
             irrigation = 0.0
         if nitrogen <= 0.0:
@@ -256,3 +285,12 @@ class DSSATOutputParser:
             if value is not None and int(value) == run_number:
                 return row
         return summary_rows[0]
+
+    def _plant_state_value(
+        self,
+        row: dict[str, str],
+        keys: tuple[str, ...],
+        default: float,
+    ) -> float:
+        value = _first_present_float(row, keys)
+        return default if value is None else value
