@@ -61,6 +61,7 @@ class SimulationScenario:
     planting_date: str = ""
     cultivar_code: str = ""
     template_name: str = ""
+    experiment_file: str = ""
     site_name: str = "quzhou"
 
 
@@ -231,6 +232,7 @@ def build_quzhou_scenarios(
                                     planting_date="2025-10-08" if crop_name == "wheat" else "2025-06-18",
                                     cultivar_code="QM6-WH" if crop_name == "wheat" else "ZD958-MZ",
                                     template_name=f"{crop_name}_quzhou_base",
+                                    experiment_file="KSAS8101.WHX" if crop_name == "wheat" else "UFGA8201.MZX",
                                 )
                             )
 

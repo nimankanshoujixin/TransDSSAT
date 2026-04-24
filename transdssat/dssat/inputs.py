@@ -20,6 +20,8 @@ class DSSATRunContext:
     soil_path: Path
     scenario_path: Path
     template_dir: Path | None
+    crop_name: str
+    experiment_file: str
 
 
 class DSSATInputBuilder:
@@ -65,6 +67,7 @@ class DSSATInputBuilder:
                     "planting_date": scenario.planting_date,
                     "cultivar_code": scenario.cultivar_code,
                     "template_name": scenario.template_name,
+                    "experiment_file": scenario.experiment_file,
                     "site_name": scenario.site_name,
                     "season_length_days": scenario.crop_spec.season_length_days,
                 },
@@ -81,6 +84,8 @@ class DSSATInputBuilder:
             "weather_path": str(weather_path),
             "soil_path": str(soil_path),
             "scenario_path": str(scenario_path),
+            "crop_name": scenario.crop_spec.crop_name,
+            "experiment_file": scenario.experiment_file,
             "expected_outputs": [
                 "Summary.OUT",
                 "PlantGro.OUT",
@@ -98,6 +103,8 @@ class DSSATInputBuilder:
             soil_path=soil_path,
             scenario_path=scenario_path,
             template_dir=template_dir,
+            crop_name=scenario.crop_spec.crop_name,
+            experiment_file=scenario.experiment_file,
         )
 
     def _copy_tree(self, source_dir: Path, target_dir: Path) -> None:

@@ -81,10 +81,14 @@ def date_to_yyddd(value: date) -> str:
     return f"{year:02d}{doy:03d}"
 
 
-def preferred_experiment_name() -> str | None:
+def preferred_experiment_name(manifest: dict[str, object]) -> str | None:
     explicit = os.environ.get("DSSAT_EXPERIMENT_FILE", "").strip()
     if explicit:
         return Path(explicit).name
+
+    manifest_value = str(manifest.get("experiment_file", "")).strip()
+    if manifest_value:
+        return Path(manifest_value).name
 
     run_command = os.environ.get("DSSAT_RUN_COMMAND", "").strip()
     if not run_command:
@@ -100,12 +104,12 @@ def preferred_experiment_name() -> str | None:
     return None
 
 
-def find_experiment_file(run_dir: Path) -> Path:
+def find_experiment_file(run_dir: Path, manifest: dict[str, object]) -> Path:
     candidates = sorted(run_dir.glob("*.MZX")) + sorted(run_dir.glob("*.WHX"))
     if not candidates:
         raise RuntimeError(f"No DSSAT experiment file (*.MZX or *.WHX) found in {run_dir}")
 
-    preferred = preferred_experiment_name()
+    preferred = preferred_experiment_name(manifest)
     if preferred:
         preferred_path = run_dir / preferred
         if preferred_path.exists():
@@ -287,7 +291,7 @@ def main() -> int:
     if not weather_path.is_absolute():
         weather_path = (run_dir / weather_path.name).resolve()
 
-    experiment_path = find_experiment_file(run_dir)
+    experiment_path = find_experiment_file(run_dir, manifest)
     policy = parse_policy(policy_path)
     weather_rows = parse_weather(weather_path)
     lines = experiment_path.read_text(encoding="utf-8", errors="ignore").splitlines()

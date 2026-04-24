@@ -44,6 +44,8 @@ Command templates can use:
 - `{manifest}`
 - `{policy}`
 - `{scenario}`
+- `{crop}`
+- `{experiment}`
 
 ## Practical template contract
 
@@ -78,7 +80,9 @@ That last mile depends on your cultivar files, weather file naming, soil file la
 
 Current repository status:
 
-- `scripts/render_dssat_inputs.py` now provides a first working policy-injection path for the copied maize experiment template already used in server validation
+- `scripts/render_dssat_inputs.py` now provides a first working policy-injection path for the copied maize and wheat experiment templates already used in server validation
 - it rewrites treatment 1 irrigation and inorganic fertilizer events from `transdssat_policy.tsv`
-- when a copied template contains multiple experiment files, it prefers the experiment file named in `DSSAT_RUN_COMMAND`
+- it regenerates DSSAT weather files directly from `transdssat_weather.csv`
+- the generated weather files now cover cross-year seasons, which is required for winter wheat
+- when a copied template contains multiple experiment files, it prefers the `experiment_file` defined on the scenario, and the DSSAT command can reference that file via `{experiment}`
 - this is a practical bridge from "template runs" to "policy-driven runs", even though full Quzhou-specific cultivar, soil, and weather rendering still remains to be completed

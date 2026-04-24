@@ -126,18 +126,25 @@ Optional:
 - season policy injection into DSSAT maize template
 - scenario weather injection into DSSAT weather files
 - differentiated real-DSSAT maize results under dry / normal / wet representative years
+- season policy injection into DSSAT wheat template
+- cross-year DSSAT weather generation for winter wheat
+- differentiated real-DSSAT wheat results under dry / normal / wet representative years
+- unified experiment-file routing so maize and wheat can share one `DSSAT_RUN_COMMAND` template through `{experiment}`
 
-### In progress
+### Current integration level
 
-- refining the DSSAT output parser so that it cleanly extracts the intended single run and maps output variables into realistic state and outcome values
+- real DSSAT `maize` path: connected
+- real DSSAT `wheat` path: connected
+- proxy backends: still available for fast local iteration
+- remaining work is no longer basic connectivity, but scaling, Quzhou-specific template refinement, and training-loop integration
 
 ### Next milestone
 
-Create crop-specific DSSAT templates and preprocessing logic so that:
+Expand the real backend from "validated single-crop template execution" to "stable sample generation and model training" by:
 
-- TransDSSAT-generated policy files are injected into DSSAT management inputs,
-- scenario weather and soil files are mapped into DSSAT-compatible inputs,
-- official DSSAT simulations correspond to the policy produced by the learning pipeline rather than only a stock example template.
+- generating larger wheat and maize sample sets,
+- refining cultivar / soil / weather templates toward Quzhou-specific inputs,
+- connecting the real DSSAT sample library to Transformer training.
 
 ## Training meaning
 
@@ -159,9 +166,8 @@ The most important result so far is that the official DSSAT backend is no longer
 - it runs official example experiments,
 - it is already callable from the TransDSSAT codebase.
 
-The remaining work is mainly the last-mile integration:
+The remaining work is mainly scale-up and domain adaptation:
 
-- correct parsing,
-- template customization,
-- policy-to-management mapping,
-- large-scale dataset generation for real training.
+- larger sample construction,
+- Quzhou-specific template refinement,
+- Transformer training and validation on the real-backend sample library.

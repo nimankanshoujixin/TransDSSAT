@@ -164,15 +164,17 @@ Example:
 export DSSAT_HOME=/opt/dssat
 export DSSAT_TEMPLATE_ROOT=/opt/transdssat/templates
 export DSSAT_PREPROCESS_COMMAND="python /opt/transdssat/scripts/render_dssat_inputs.py {manifest}"
-export DSSAT_RUN_COMMAND="/opt/dssat/bin/dscsm048"
+export DSSAT_RUN_COMMAND="/opt/dssat/bin/dscsm048 A {experiment}"
 python scripts/evaluate_season_policy.py --engine dssat_official --crop wheat --weather-regime normal
 ```
 
 Current repository support:
 
 - `scripts/render_dssat_inputs.py` can inject TransDSSAT season policies into a copied DSSAT experiment template
-- the current implementation is aimed at the stock maize template path already used on the server and rewrites treatment 1 irrigation and fertilizer events
-- when multiple experiment files exist in one copied template directory, the preprocessor prefers the experiment file referenced by `DSSAT_RUN_COMMAND`
+- the current implementation supports the stock maize and wheat template paths already validated on the server
+- it rewrites treatment 1 irrigation and fertilizer events and regenerates DSSAT weather files from `transdssat_weather.csv`
+- weather generation now supports cross-year crop seasons such as winter wheat
+- when multiple experiment files exist in one copied template directory, the preprocessor prefers `scenario.experiment_file`; `DSSAT_RUN_COMMAND` can use `{experiment}` so one command template works for both crops
 
 ## Dataset generation flow
 
@@ -193,6 +195,13 @@ To restrict generation to one crop:
 
 ```bash
 python scripts/generate_dataset.py --output-dir data/generated_dssat_maize --scenario-count 6 --engines dssat_official --crops maize
+```
+
+For winter wheat on the current server-side template path:
+
+```bash
+export DSSAT_RUN_COMMAND="/opt/dssat/dscsm048 A {experiment}"
+python scripts/evaluate_season_policy.py --engine dssat_official --crop wheat --weather-regime normal
 ```
 
 If the official backend is ready on the server:

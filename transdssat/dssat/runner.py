@@ -67,6 +67,8 @@ class DSSATRunner:
             manifest=str(context.manifest_path),
             policy=str(context.policy_path),
             scenario=str(context.scenario_path),
+            crop=context.crop_name,
+            experiment=context.experiment_file,
         )
         argv = split_command(command)
         if not argv:
