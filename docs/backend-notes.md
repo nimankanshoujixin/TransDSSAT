@@ -75,3 +75,9 @@ One server-side customization remains unavoidable:
 - or a preprocess script that reads `transdssat_manifest.json` and writes the final DSSAT experiment files expected by your DSSAT setup.
 
 That last mile depends on your cultivar files, weather file naming, soil file layout, and experiment template conventions.
+
+Current repository status:
+
+- `scripts/render_dssat_inputs.py` now provides a first working policy-injection path for the copied maize experiment template already used in server validation
+- it rewrites treatment 1 irrigation and inorganic fertilizer events from `transdssat_policy.tsv`
+- this is a practical bridge from "template runs" to "policy-driven runs", even though full Quzhou-specific cultivar, soil, and weather rendering still remains to be completed

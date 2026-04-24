@@ -168,6 +168,11 @@ export DSSAT_RUN_COMMAND="/opt/dssat/bin/dscsm048"
 python scripts/evaluate_season_policy.py --engine dssat_official --crop wheat --weather-regime normal
 ```
 
+Current repository support:
+
+- `scripts/render_dssat_inputs.py` can inject TransDSSAT season policies into a copied DSSAT experiment template
+- the current implementation is aimed at the stock maize template path already used on the server and rewrites treatment 1 irrigation and fertilizer events
+
 ## Dataset generation flow
 
 The default dataset generation flow is:
