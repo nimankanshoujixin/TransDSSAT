@@ -18,6 +18,16 @@ class PolicyRow:
     nitrogen_kg_ha: float
 
 
+@dataclass(slots=True)
+class WeatherRow:
+    day_index: int
+    tmin_c: float
+    tmax_c: float
+    precipitation_mm: float
+    radiation_mj_m2: float
+    et0_mm: float
+
+
 def parse_policy(policy_path: Path) -> list[PolicyRow]:
     lines = policy_path.read_text(encoding="utf-8").splitlines()
     rows: list[PolicyRow] = []
@@ -32,6 +42,26 @@ def parse_policy(policy_path: Path) -> list[PolicyRow]:
                 day_index=int(parts[2]),
                 irrigation_mm=float(parts[3]),
                 nitrogen_kg_ha=float(parts[4]),
+            )
+        )
+    return rows
+
+
+def parse_weather(weather_path: Path) -> list[WeatherRow]:
+    lines = weather_path.read_text(encoding="utf-8").splitlines()
+    rows: list[WeatherRow] = []
+    for raw_line in lines[1:]:
+        if not raw_line.strip():
+            continue
+        parts = raw_line.split(",")
+        rows.append(
+            WeatherRow(
+                day_index=int(parts[0]),
+                tmin_c=float(parts[1]),
+                tmax_c=float(parts[2]),
+                precipitation_mm=float(parts[3]),
+                radiation_mj_m2=float(parts[4]),
+                et0_mm=float(parts[5]),
             )
         )
     return rows
@@ -101,6 +131,19 @@ def extract_template_planting_date(lines: list[str]) -> str:
     raise RuntimeError("Could not locate planting date in DSSAT experiment file.")
 
 
+def extract_field_metadata(lines: list[str]) -> tuple[str, float, float, float]:
+    for index, line in enumerate(lines):
+        if line.startswith("@L ID_FIELD"):
+            field_line = lines[index + 1].split()
+            coord_line = lines[index + 3].split()
+            station_code = field_line[2]
+            latitude = float(coord_line[1])
+            longitude = float(coord_line[2])
+            elevation = float(coord_line[3])
+            return station_code, latitude, longitude, elevation
+    raise RuntimeError("Could not locate field metadata in DSSAT experiment file.")
+
+
 def build_irrigation_lines(policy: list[PolicyRow], planting_yyddd: str) -> list[str]:
     planting_date = yyddd_to_date(planting_yyddd)
     lines = [
@@ -124,6 +167,53 @@ def build_fertilizer_lines(policy: list[PolicyRow], planting_yyddd: str) -> list
             "     0     0     0     0   -99 TRNSDAT"
         )
     return lines
+
+
+def build_weather_file(
+    run_dir: Path,
+    station_code: str,
+    planting_yyddd: str,
+    latitude: float,
+    longitude: float,
+    elevation: float,
+    weather_rows: list[WeatherRow],
+) -> Path:
+    planting = yyddd_to_date(planting_yyddd)
+    weather_year = planting.year % 100
+    filename = f"{station_code}{weather_year:02d}01.WTH"
+    path = run_dir / filename
+
+    tav = sum((row.tmin_c + row.tmax_c) / 2.0 for row in weather_rows) / max(1, len(weather_rows))
+    annual_max = max(row.tmax_c for row in weather_rows)
+    annual_min = min(row.tmin_c for row in weather_rows)
+    amp = max(0.1, annual_max - annual_min)
+
+    def row_for_offset(offset: int) -> WeatherRow:
+        if offset < 0:
+            return weather_rows[0]
+        if offset >= len(weather_rows):
+            return weather_rows[-1]
+        return weather_rows[offset]
+
+    planting_doy = int(planting_yyddd[2:])
+    lines = [
+        "*WEATHER DATA : TransDSSAT generated weather",
+        "",
+        "@ INSI      LAT     LONG  ELEV   TAV   AMP REFHT WNDHT",
+        f"  {station_code:<4} {latitude:7.3f} {longitude:9.3f} {int(elevation):5d} {tav:5.1f} {amp:5.1f}  2.00  3.00",
+        "@DATE  SRAD  TMAX  TMIN  RAIN               PAR ",
+    ]
+    for doy in range(1, 366):
+        offset = doy - planting_doy
+        weather = row_for_offset(offset)
+        par = weather.radiation_mj_m2 * 2.1
+        lines.append(
+            f"{weather_year:02d}{doy:03d} {weather.radiation_mj_m2:5.1f} {weather.tmax_c:5.1f} "
+            f"{weather.tmin_c:5.1f} {weather.precipitation_mm:5.1f}              {par:5.1f} "
+        )
+
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
 
 
 def replace_irrigation_block(lines: list[str], replacement: list[str]) -> list[str]:
@@ -190,18 +280,34 @@ def main() -> int:
     if not policy_path.is_absolute():
         policy_path = (run_dir / policy_path.name).resolve()
 
+    weather_path = Path(manifest["weather_path"])
+    if not weather_path.is_absolute():
+        weather_path = (run_dir / weather_path.name).resolve()
+
     experiment_path = find_experiment_file(run_dir)
     policy = parse_policy(policy_path)
+    weather_rows = parse_weather(weather_path)
     lines = experiment_path.read_text(encoding="utf-8", errors="ignore").splitlines()
     planting_yyddd = extract_template_planting_date(lines)
+    station_code, latitude, longitude, elevation = extract_field_metadata(lines)
     irrigation_lines = build_irrigation_lines(policy, planting_yyddd)
     fertilizer_lines = build_fertilizer_lines(policy, planting_yyddd)
     updated = replace_irrigation_block(lines, irrigation_lines)
     updated = replace_fertilizer_block(updated, fertilizer_lines)
     experiment_path.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    weather_file = build_weather_file(
+        run_dir=run_dir,
+        station_code=station_code,
+        planting_yyddd=planting_yyddd,
+        latitude=latitude,
+        longitude=longitude,
+        elevation=elevation,
+        weather_rows=weather_rows,
+    )
 
     summary = {
         "experiment_file": str(experiment_path),
+        "weather_file": str(weather_file),
         "policy_events": len(policy),
         "template_planting_yyddd": planting_yyddd,
     }
