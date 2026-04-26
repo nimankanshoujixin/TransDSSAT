@@ -17,7 +17,7 @@ The repository supports two backend layers:
 The codebase is now organized around season-level decision evaluation instead of only daily threshold rules.
 
 - `transdssat/scenarios.py`
-  Builds Quzhou-style scenarios: crop, soil, weather regime, budgets, planting date, cultivar code, and template name.
+  Builds Quzhou-style scenarios. It now supports both the legacy fixed grid and random scenario sampling with perturbed soil initials, planting dates, and continuous budget ranges.
 - `transdssat/season.py`
   Defines season policies as stage-based actions and provides the baseline policy generator.
 - `transdssat/environments/proxy.py`
@@ -65,6 +65,8 @@ Reward is computed from:
 - average water stress
 - average nitrogen stress
 - per-step biomass growth shaping
+- budget-deviation penalties for water and nitrogen
+- extra penalties for severe under-irrigation / oversupply behavior
 
 Proxy backends return the reward during the rollout.
 
@@ -191,6 +193,12 @@ Command:
 python scripts/generate_dataset.py --output-dir data/generated --scenario-count 216 --engines wofost_proxy dssat_proxy
 ```
 
+To move beyond the legacy 108-scenario grid, use random sampling:
+
+```bash
+python scripts/generate_dataset.py --output-dir data/generated_random --scenario-count 400 --sampling-mode random --engines dssat_proxy
+```
+
 To restrict generation to one crop:
 
 ```bash
@@ -277,7 +285,8 @@ Example:
 ```bash
 python scripts/train_rl_transformer.py \
   --engine dssat_official \
-  --scenario-count 108 \
+  --scenario-count 300 \
+  --sampling-mode random \
   --epochs 10 \
   --batch-size 4 \
   --output-dir artifacts/rl_transformer
@@ -285,7 +294,7 @@ python scripts/train_rl_transformer.py \
 
 Recommended workflow:
 
-1. validate the RL loop on `dssat_proxy`
+1. validate the RL loop on `dssat_proxy` with `--sampling-mode random`
 2. switch to `dssat_official`
 3. evaluate the trained checkpoint with `scripts/evaluate_policy_report.py`
 

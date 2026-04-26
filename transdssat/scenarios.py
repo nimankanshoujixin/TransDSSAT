@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, timedelta
 import math
 import random
 
@@ -74,6 +75,25 @@ def quzhou_typical_soil() -> SoilProfile:
         initial_root_zone_water_mm=180.0,
         initial_nitrogen_kg_ha=90.0,
         drainage_coeff=0.12,
+    )
+
+
+def shifted_planting_date(base_date: str, offset_days: int) -> str:
+    return (date.fromisoformat(base_date) + timedelta(days=offset_days)).isoformat()
+
+
+def perturbed_soil_profile(base_soil: SoilProfile, rng: random.Random) -> SoilProfile:
+    water_multiplier = rng.uniform(0.78, 1.08)
+    nitrogen_multiplier = rng.uniform(0.65, 1.30)
+    drainage_shift = rng.uniform(-0.025, 0.025)
+    return SoilProfile(
+        soil_name=base_soil.soil_name,
+        field_capacity_mm=base_soil.field_capacity_mm,
+        wilting_point_mm=base_soil.wilting_point_mm,
+        saturation_mm=base_soil.saturation_mm,
+        initial_root_zone_water_mm=round(base_soil.initial_root_zone_water_mm * water_multiplier, 3),
+        initial_nitrogen_kg_ha=round(base_soil.initial_nitrogen_kg_ha * nitrogen_multiplier, 3),
+        drainage_coeff=round(max(0.05, min(0.25, base_soil.drainage_coeff + drainage_shift)), 4),
     )
 
 
@@ -186,54 +206,111 @@ def build_quzhou_scenarios(
     target_count: int = 216,
     engines: tuple[str, ...] = ("wofost_proxy", "dssat_proxy"),
     crops_filter: tuple[str, ...] | None = None,
+    sampling_mode: str = "grid",
+    seed: int = 20260417,
 ) -> list[SimulationScenario]:
     soil = quzhou_typical_soil()
     crops = build_crop_specs()
     if crops_filter:
         allowed = set(crops_filter)
         crops = {name: spec for name, spec in crops.items() if name in allowed}
+    if not crops or not engines or target_count <= 0:
+        return []
     scenarios: list[SimulationScenario] = []
     weather_regimes = ("dry", "normal", "wet")
     irrigation_budgets = (90.0, 150.0, 210.0)
     nitrogen_budgets = (100.0, 170.0, 240.0)
-    management_modes = ("balanced", "reproductive_focus")
-    seed = 20260417
+    planting_dates = {"wheat": "2025-10-08", "maize": "2025-06-18"}
+    cultivar_codes = {"wheat": "QM6-WH", "maize": "ZD958-MZ"}
+    experiment_files = {"wheat": "KSAS8101.WHX", "maize": "UFGA8201.MZX"}
 
-    for engine_name in engines:
-        for crop_name, crop_spec in crops.items():
-            for regime in weather_regimes:
-                for irrigation_budget_mm in irrigation_budgets:
-                    for nitrogen_budget_kg_ha in nitrogen_budgets:
-                        for management_mode in management_modes:
-                            scenario_seed = seed + len(scenarios) * 17
-                            weather = build_representative_weather(
-                                crop_name=crop_name,
-                                regime=regime,
-                                season_length_days=crop_spec.season_length_days,
-                                seed=scenario_seed,
-                            )
-                            scenario_id = (
-                                f"{engine_name}-{crop_name}-{regime}-"
-                                f"irr{int(irrigation_budget_mm)}-n{int(nitrogen_budget_kg_ha)}-"
-                                f"{management_mode}"
-                            )
-                            scenarios.append(
-                                SimulationScenario(
-                                    scenario_id=scenario_id,
-                                    engine_name=engine_name,
-                                    crop_spec=crop_spec,
-                                    soil_profile=soil,
-                                    weather_regime=regime,
-                                    weather=weather,
-                                    irrigation_budget_mm=irrigation_budget_mm,
-                                    nitrogen_budget_kg_ha=nitrogen_budget_kg_ha,
-                                    management_mode=management_mode,
+    if sampling_mode == "grid":
+        management_modes = ("balanced", "reproductive_focus")
+        for engine_name in engines:
+            for crop_name, crop_spec in crops.items():
+                for regime in weather_regimes:
+                    for irrigation_budget_mm in irrigation_budgets:
+                        for nitrogen_budget_kg_ha in nitrogen_budgets:
+                            for management_mode in management_modes:
+                                scenario_seed = seed + len(scenarios) * 17
+                                weather = build_representative_weather(
+                                    crop_name=crop_name,
+                                    regime=regime,
+                                    season_length_days=crop_spec.season_length_days,
                                     seed=scenario_seed,
-                                    planting_date="2025-10-08" if crop_name == "wheat" else "2025-06-18",
-                                    cultivar_code="QM6-WH" if crop_name == "wheat" else "ZD958-MZ",
-                                    template_name=f"{crop_name}_quzhou_base",
-                                    experiment_file="KSAS8101.WHX" if crop_name == "wheat" else "UFGA8201.MZX",
                                 )
-                            )
+                                scenario_id = (
+                                    f"{engine_name}-{crop_name}-{regime}-"
+                                    f"irr{int(irrigation_budget_mm)}-n{int(nitrogen_budget_kg_ha)}-"
+                                    f"{management_mode}"
+                                )
+                                scenarios.append(
+                                    SimulationScenario(
+                                        scenario_id=scenario_id,
+                                        engine_name=engine_name,
+                                        crop_spec=crop_spec,
+                                        soil_profile=soil,
+                                        weather_regime=regime,
+                                        weather=weather,
+                                        irrigation_budget_mm=irrigation_budget_mm,
+                                        nitrogen_budget_kg_ha=nitrogen_budget_kg_ha,
+                                        management_mode=management_mode,
+                                        seed=scenario_seed,
+                                        planting_date=planting_dates[crop_name],
+                                        cultivar_code=cultivar_codes[crop_name],
+                                        template_name=f"{crop_name}_quzhou_base",
+                                        experiment_file=experiment_files[crop_name],
+                                    )
+                                )
+        return scenarios[:target_count]
 
-    return scenarios[:target_count]
+    if sampling_mode != "random":
+        raise ValueError(f"Unsupported sampling mode: {sampling_mode}")
+
+    management_modes = ("balanced", "reproductive_focus", "vegetative_focus")
+    combo_cycle = [(engine_name, crop_name, crop_spec) for engine_name in engines for crop_name, crop_spec in crops.items()]
+    rng = random.Random(seed)
+
+    for scenario_index in range(target_count):
+        engine_name, crop_name, crop_spec = combo_cycle[scenario_index % len(combo_cycle)]
+        scenario_seed = seed + scenario_index * 97
+        regime = weather_regimes[(scenario_index + rng.randrange(len(weather_regimes))) % len(weather_regimes)]
+        irrigation_budget_mm = round(rng.uniform(70.0, 240.0), 1)
+        nitrogen_budget_kg_ha = round(rng.uniform(60.0, 260.0), 1)
+        management_mode = management_modes[rng.randrange(len(management_modes))]
+        weather = build_representative_weather(
+            crop_name=crop_name,
+            regime=regime,
+            season_length_days=crop_spec.season_length_days,
+            seed=scenario_seed,
+        )
+        local_rng = random.Random(scenario_seed + 11)
+        planting_shift = local_rng.randint(-10, 10) if crop_name == "wheat" else local_rng.randint(-7, 7)
+        scenario_soil = perturbed_soil_profile(soil, local_rng)
+        planting_date = shifted_planting_date(planting_dates[crop_name], planting_shift)
+        scenario_id = (
+            f"{engine_name}-{crop_name}-rand{scenario_index:04d}-{regime}-"
+            f"irr{int(round(irrigation_budget_mm))}-n{int(round(nitrogen_budget_kg_ha))}-"
+            f"{management_mode}-sw{int(round(scenario_soil.initial_root_zone_water_mm))}-"
+            f"sn{int(round(scenario_soil.initial_nitrogen_kg_ha))}-pd{planting_shift:+d}"
+        )
+        scenarios.append(
+            SimulationScenario(
+                scenario_id=scenario_id,
+                engine_name=engine_name,
+                crop_spec=crop_spec,
+                soil_profile=scenario_soil,
+                weather_regime=regime,
+                weather=weather,
+                irrigation_budget_mm=irrigation_budget_mm,
+                nitrogen_budget_kg_ha=nitrogen_budget_kg_ha,
+                management_mode=management_mode,
+                seed=scenario_seed,
+                planting_date=planting_date,
+                cultivar_code=cultivar_codes[crop_name],
+                template_name=f"{crop_name}_quzhou_base",
+                experiment_file=experiment_files[crop_name],
+            )
+        )
+
+    return scenarios

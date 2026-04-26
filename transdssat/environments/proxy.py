@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from transdssat.domain import CropAction, CropOutcome, CropState
 from transdssat.environments.base import CropEnvironment
+from transdssat.rewarding import RewardWeights, input_use_efficiency, reward_from_outcome
 from transdssat.scenarios import SimulationScenario, stage_for_day
 
 
@@ -63,6 +64,7 @@ class ProxyCropEnvironment(CropEnvironment):
     def __init__(self, scenario: SimulationScenario, coefficients: ProxyCoefficients) -> None:
         self.scenario = scenario
         self.coefficients = coefficients
+        self.reward_weights = RewardWeights()
         self.day_index = 0
         self.root_zone_water_mm = scenario.soil_profile.initial_root_zone_water_mm
         self.soil_nitrogen_kg_ha = scenario.soil_profile.initial_nitrogen_kg_ha
@@ -73,6 +75,9 @@ class ProxyCropEnvironment(CropEnvironment):
         self.total_irrigation_mm = 0.0
         self.total_nitrogen_kg_ha = 0.0
         self.cumulative_reward = 0.0
+        self.cumulative_water_stress = 0.0
+        self.cumulative_nitrogen_stress = 0.0
+        self.stress_observations = 0
         self._done = False
 
     def reset(self) -> CropState:
@@ -86,6 +91,9 @@ class ProxyCropEnvironment(CropEnvironment):
         self.total_irrigation_mm = 0.0
         self.total_nitrogen_kg_ha = 0.0
         self.cumulative_reward = 0.0
+        self.cumulative_water_stress = 0.0
+        self.cumulative_nitrogen_stress = 0.0
+        self.stress_observations = 0
         self._done = False
         return self._current_state()
 
@@ -156,18 +164,35 @@ class ProxyCropEnvironment(CropEnvironment):
         self.last_nitrogen_stress = nitrogen_stress
         self.total_irrigation_mm += action.irrigation_mm
         self.total_nitrogen_kg_ha += action.nitrogen_kg_ha
+        self.cumulative_water_stress += water_stress
+        self.cumulative_nitrogen_stress += nitrogen_stress
+        self.stress_observations += 1
 
+        weights = self.reward_weights
         reward = (
-            biomass_gain * 0.018
-            - action.irrigation_mm * 0.06
-            - action.nitrogen_kg_ha * 0.09
-            - self.coefficients.stress_penalty * (water_stress + nitrogen_stress) * 3.5
+            biomass_gain * weights.biomass_gain_weight
+            - action.irrigation_mm * weights.irrigation_cost
+            - action.nitrogen_kg_ha * weights.nitrogen_cost
+            - water_stress * weights.water_stress_cost
+            - nitrogen_stress * weights.nitrogen_stress_cost
         )
 
         self.day_index += 1
         self._done = self.day_index >= self.scenario.crop_spec.season_length_days
         if self._done:
-            reward += self.final_outcome().yield_kg_ha / 1000.0
+            outcome = self.final_outcome()
+            avg_water_stress = self.cumulative_water_stress / max(1, self.stress_observations)
+            avg_nitrogen_stress = self.cumulative_nitrogen_stress / max(1, self.stress_observations)
+            reward += reward_from_outcome(
+                yield_kg_ha=outcome.yield_kg_ha,
+                total_irrigation_mm=outcome.total_irrigation_mm,
+                total_nitrogen_kg_ha=outcome.total_nitrogen_kg_ha,
+                irrigation_budget_mm=self.scenario.irrigation_budget_mm,
+                nitrogen_budget_kg_ha=self.scenario.nitrogen_budget_kg_ha,
+                avg_water_stress=avg_water_stress,
+                avg_nitrogen_stress=avg_nitrogen_stress,
+                weights=weights,
+            )
         self.cumulative_reward += reward
         next_state = self._current_state()
         info = {
@@ -191,8 +216,8 @@ class ProxyCropEnvironment(CropEnvironment):
             biomass_kg_ha=round(self.biomass_kg_ha, 3),
             total_irrigation_mm=round(self.total_irrigation_mm, 3),
             total_nitrogen_kg_ha=round(self.total_nitrogen_kg_ha, 3),
-            water_use_efficiency=round(yield_kg_ha / max(1.0, self.total_irrigation_mm + 1.0), 5),
-            nitrogen_use_efficiency=round(yield_kg_ha / max(1.0, self.total_nitrogen_kg_ha + 1.0), 5),
+            water_use_efficiency=input_use_efficiency(yield_kg_ha, self.total_irrigation_mm),
+            nitrogen_use_efficiency=input_use_efficiency(yield_kg_ha, self.total_nitrogen_kg_ha),
             cumulative_reward=round(self.cumulative_reward, 5),
         )
 

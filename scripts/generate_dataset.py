@@ -20,7 +20,13 @@ def main() -> int:
         "--scenario-count",
         type=int,
         default=216,
-        help="Number of scenarios to generate from the scenario grid.",
+        help="Number of scenarios to generate.",
+    )
+    parser.add_argument(
+        "--sampling-mode",
+        choices=("grid", "random"),
+        default="grid",
+        help="Use the legacy fixed grid or random scenario sampling.",
     )
     parser.add_argument(
         "--engines",
@@ -34,12 +40,15 @@ def main() -> int:
         default=None,
         help="Optional crop filter, for example: maize wheat",
     )
+    parser.add_argument("--seed", type=int, default=20260426, help="Scenario sampling seed.")
     args = parser.parse_args()
 
     scenarios = build_quzhou_scenarios(
         target_count=args.scenario_count,
         engines=tuple(args.engines),
         crops_filter=tuple(args.crops) if args.crops else None,
+        sampling_mode=args.sampling_mode,
+        seed=args.seed,
     )
     bundle = generate_dataset_bundle(scenarios)
     metadata = save_dataset_bundle(args.output_dir, bundle)

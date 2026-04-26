@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from transdssat.domain import CropAction, CropOutcome, Trajectory, TrajectoryStep
+from transdssat.domain import CropAction, Trajectory, TrajectoryStep
 from transdssat.dssat import DSSATOutputParser, DSSATRunner
+from transdssat.rewarding import RewardWeights, input_use_efficiency, reward_from_outcome
 from transdssat.scenarios import SimulationScenario
-from transdssat.season import SeasonPolicy, RewardWeights, reward_from_outcome
+from transdssat.season import SeasonPolicy
 
 
 @dataclass(slots=True)
@@ -46,13 +47,13 @@ class OfficialDSSATEnvironment:
             parsed.outcome.total_irrigation_mm = policy.total_irrigation_mm
         if parsed.outcome.total_nitrogen_kg_ha <= 0.0:
             parsed.outcome.total_nitrogen_kg_ha = policy.total_nitrogen_kg_ha
-        parsed.outcome.water_use_efficiency = round(
-            parsed.outcome.yield_kg_ha / max(1.0, parsed.outcome.total_irrigation_mm + 1.0),
-            5,
+        parsed.outcome.water_use_efficiency = input_use_efficiency(
+            parsed.outcome.yield_kg_ha,
+            parsed.outcome.total_irrigation_mm,
         )
-        parsed.outcome.nitrogen_use_efficiency = round(
-            parsed.outcome.yield_kg_ha / max(1.0, parsed.outcome.total_nitrogen_kg_ha + 1.0),
-            5,
+        parsed.outcome.nitrogen_use_efficiency = input_use_efficiency(
+            parsed.outcome.yield_kg_ha,
+            parsed.outcome.total_nitrogen_kg_ha,
         )
         trajectory = self._build_trajectory(scenario, policy, parsed, weights)
         reward = trajectory.outcome.cumulative_reward
@@ -92,10 +93,14 @@ class OfficialDSSATEnvironment:
             done = index == len(states) - 2
             if done:
                 terminal_reward = reward_from_outcome(
-                    parsed.outcome,
-                    parsed.avg_water_stress,
-                    parsed.avg_nitrogen_stress,
-                    weights,
+                    yield_kg_ha=parsed.outcome.yield_kg_ha,
+                    total_irrigation_mm=parsed.outcome.total_irrigation_mm,
+                    total_nitrogen_kg_ha=parsed.outcome.total_nitrogen_kg_ha,
+                    irrigation_budget_mm=scenario.irrigation_budget_mm,
+                    nitrogen_budget_kg_ha=scenario.nitrogen_budget_kg_ha,
+                    avg_water_stress=parsed.avg_water_stress,
+                    avg_nitrogen_stress=parsed.avg_nitrogen_stress,
+                    weights=weights,
                 )
                 reward += terminal_reward
             total_reward += reward

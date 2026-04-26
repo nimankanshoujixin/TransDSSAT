@@ -8,8 +8,8 @@ from typing import Iterable
 from transdssat.domain import CropState
 
 
-IRRIGATION_BINS = (0.0, 18.0, 28.0, 40.0)
-NITROGEN_BINS = (0.0, 20.0, 40.0, 60.0)
+IRRIGATION_BINS = (0.0, 10.0, 18.0, 28.0, 40.0, 55.0, 70.0)
+NITROGEN_BINS = (0.0, 10.0, 20.0, 30.0, 40.0, 60.0, 80.0)
 
 
 def encode_state(state: CropState) -> list[float]:

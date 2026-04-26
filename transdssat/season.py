@@ -4,8 +4,9 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 import hashlib
 
-from transdssat.domain import CropAction, CropOutcome, Trajectory, TrajectoryStep
+from transdssat.domain import CropAction, Trajectory, TrajectoryStep
 from transdssat.environments import make_environment
+from transdssat.rewarding import RewardWeights, reward_from_outcome
 from transdssat.scenarios import STAGES, SimulationScenario, stage_for_day
 
 
@@ -21,6 +22,12 @@ STAGE_BUDGET_SPLITS = {
         "vegetative": (0.23, 0.32),
         "reproductive": (0.43, 0.36),
         "grain_fill": (0.22, 0.16),
+    },
+    "vegetative_focus": {
+        "emergence": (0.15, 0.18),
+        "vegetative": (0.40, 0.42),
+        "reproductive": (0.27, 0.26),
+        "grain_fill": (0.18, 0.14),
     },
 }
 
@@ -74,17 +81,6 @@ class SeasonPolicy:
             "total_irrigation_mm": self.total_irrigation_mm,
             "total_nitrogen_kg_ha": self.total_nitrogen_kg_ha,
         }
-
-
-@dataclass(slots=True)
-class RewardWeights:
-    yield_weight: float = 0.003
-    irrigation_cost: float = 0.010
-    nitrogen_cost: float = 0.020
-    water_stress_cost: float = 1.250
-    nitrogen_stress_cost: float = 1.100
-    biomass_gain_weight: float = 0.0025
-
 
 def stage_start_days(season_length_days: int) -> dict[str, int]:
     starts: dict[str, int] = {}
@@ -187,21 +183,4 @@ def rollout_proxy_policy(scenario: SimulationScenario, policy: SeasonPolicy) -> 
         steps=steps,
         outcome=outcome,
         policy=policy.to_dict(),
-    )
-
-
-def reward_from_outcome(
-    outcome: CropOutcome,
-    avg_water_stress: float,
-    avg_nitrogen_stress: float,
-    weights: RewardWeights | None = None,
-) -> float:
-    weights = weights or RewardWeights()
-    return round(
-        outcome.yield_kg_ha * weights.yield_weight
-        - outcome.total_irrigation_mm * weights.irrigation_cost
-        - outcome.total_nitrogen_kg_ha * weights.nitrogen_cost
-        - avg_water_stress * weights.water_stress_cost
-        - avg_nitrogen_stress * weights.nitrogen_stress_cost,
-        6,
     )

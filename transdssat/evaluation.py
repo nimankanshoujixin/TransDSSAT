@@ -157,10 +157,16 @@ def summarize_scorecards(scorecards: list[PolicyScorecard]) -> dict:
             "scenario_count": 0,
             "mean_total_score_100": 0.0,
             "mean_reward": 0.0,
+            "mean_reward_gain": 0.0,
             "mean_yield_kg_ha": 0.0,
             "mean_yield_gain_pct": 0.0,
+            "mean_irrigation_mm": 0.0,
+            "mean_nitrogen_kg_ha": 0.0,
             "mean_water_use_efficiency": 0.0,
             "mean_nitrogen_use_efficiency": 0.0,
+            "mean_budget_adherence_score": 0.0,
+            "mean_avg_water_stress": 0.0,
+            "mean_avg_nitrogen_stress": 0.0,
         }
 
     count = len(scorecards)
@@ -171,6 +177,11 @@ def summarize_scorecards(scorecards: list[PolicyScorecard]) -> dict:
         "mean_reward_gain": round(sum(card.reward_gain for card in scorecards) / count, 6),
         "mean_yield_kg_ha": round(sum(card.yield_kg_ha for card in scorecards) / count, 3),
         "mean_yield_gain_pct": round(sum(card.yield_gain_pct for card in scorecards) / count, 3),
+        "mean_irrigation_mm": round(sum(card.irrigation_mm for card in scorecards) / count, 3),
+        "mean_nitrogen_kg_ha": round(sum(card.nitrogen_kg_ha for card in scorecards) / count, 3),
         "mean_water_use_efficiency": round(sum(card.water_use_efficiency for card in scorecards) / count, 5),
         "mean_nitrogen_use_efficiency": round(sum(card.nitrogen_use_efficiency for card in scorecards) / count, 5),
+        "mean_budget_adherence_score": round(sum(card.budget_adherence_score for card in scorecards) / count, 3),
+        "mean_avg_water_stress": round(sum(card.avg_water_stress for card in scorecards) / count, 6),
+        "mean_avg_nitrogen_stress": round(sum(card.avg_nitrogen_stress for card in scorecards) / count, 6),
     }

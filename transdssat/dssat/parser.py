@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 
 from transdssat.domain import CropOutcome, CropState
+from transdssat.rewarding import input_use_efficiency
 from transdssat.scenarios import SimulationScenario, stage_for_day
 
 
@@ -272,8 +273,8 @@ class DSSATOutputParser:
             biomass_kg_ha=round(biomass_kg_ha, 3),
             total_irrigation_mm=round(irrigation, 3),
             total_nitrogen_kg_ha=round(nitrogen, 3),
-            water_use_efficiency=round(yield_kg_ha / max(1.0, irrigation + 1.0), 5),
-            nitrogen_use_efficiency=round(yield_kg_ha / max(1.0, nitrogen + 1.0), 5),
+            water_use_efficiency=input_use_efficiency(yield_kg_ha, irrigation),
+            nitrogen_use_efficiency=input_use_efficiency(yield_kg_ha, nitrogen),
             cumulative_reward=0.0,
         )
 

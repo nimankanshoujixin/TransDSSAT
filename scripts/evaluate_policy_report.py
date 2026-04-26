@@ -20,16 +20,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Generate an agronomic evaluation report for baseline or RL policies.")
     parser.add_argument("--engine", default="dssat_proxy", help="wofost_proxy, dssat_proxy, dssat_official")
     parser.add_argument("--scenario-count", type=int, default=108, help="Number of scenarios to evaluate.")
+    parser.add_argument("--sampling-mode", choices=("grid", "random"), default="random")
     parser.add_argument("--crops", nargs="+", default=["wheat", "maize"], help="Crop subset.")
     parser.add_argument("--split", choices=("train", "test", "all"), default="test")
     parser.add_argument("--checkpoint", default=None, help="Optional RL checkpoint path. Omit for baseline-only report.")
     parser.add_argument("--output", default=None, help="Optional JSON report path.")
+    parser.add_argument("--seed", type=int, default=20260426)
     args = parser.parse_args()
 
     scenarios = build_quzhou_scenarios(
         target_count=args.scenario_count,
         engines=(args.engine,),
         crops_filter=tuple(args.crops) if args.crops else None,
+        sampling_mode=args.sampling_mode,
+        seed=args.seed,
     )
     if args.split != "all":
         scenarios = [scenario for scenario in scenarios if split_name(scenario.scenario_id) == args.split]

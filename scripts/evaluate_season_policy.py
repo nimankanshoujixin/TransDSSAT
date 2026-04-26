@@ -23,9 +23,16 @@ def main() -> int:
     )
     parser.add_argument("--crop", default="wheat", help="Crop filter: wheat or maize")
     parser.add_argument("--weather-regime", default="normal", help="dry, normal, wet")
+    parser.add_argument("--sampling-mode", choices=("grid", "random"), default="grid")
+    parser.add_argument("--seed", type=int, default=20260426)
     args = parser.parse_args()
 
-    scenarios = build_quzhou_scenarios(target_count=400, engines=(args.engine,))
+    scenarios = build_quzhou_scenarios(
+        target_count=400,
+        engines=(args.engine,),
+        sampling_mode=args.sampling_mode,
+        seed=args.seed,
+    )
     scenario = next(
         scenario
         for scenario in scenarios

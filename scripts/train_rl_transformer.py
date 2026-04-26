@@ -47,12 +47,19 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Train a season-level RL Transformer against DSSAT rewards.")
     parser.add_argument("--engine", default="dssat_proxy", help="wofost_proxy, dssat_proxy, dssat_official")
     parser.add_argument("--scenario-count", type=int, default=108, help="Number of scenarios from the scenario grid.")
+    parser.add_argument("--sampling-mode", choices=("grid", "random"), default="random", help="Scenario generation mode.")
     parser.add_argument("--crops", nargs="+", default=["wheat", "maize"], help="Crop subset.")
     parser.add_argument("--epochs", type=int, default=10, help="Number of RL epochs.")
     parser.add_argument("--batch-size", type=int, default=4, help="Scenario batch size per policy update.")
     parser.add_argument("--lr", type=float, default=5e-4, help="Adam learning rate.")
     parser.add_argument("--entropy-coef", type=float, default=0.01, help="Entropy bonus coefficient.")
     parser.add_argument("--seed", type=int, default=20260426, help="Random seed.")
+    parser.add_argument(
+        "--selection-metric",
+        choices=("reward_gain", "score"),
+        default="reward_gain",
+        help="How to select the best checkpoint on the test split.",
+    )
     parser.add_argument("--output-dir", default="artifacts/rl_transformer", help="Directory for RL checkpoints and metrics.")
     args = parser.parse_args()
 
@@ -70,6 +77,8 @@ def main() -> int:
         target_count=args.scenario_count,
         engines=(args.engine,),
         crops_filter=tuple(args.crops) if args.crops else None,
+        sampling_mode=args.sampling_mode,
+        seed=args.seed,
     )
     train_scenarios = [scenario for scenario in scenarios if split_name(scenario.scenario_id) == "train"]
     test_scenarios = [scenario for scenario in scenarios if split_name(scenario.scenario_id) == "test"]
@@ -132,7 +141,11 @@ def main() -> int:
         test_summary, _ = evaluate_greedy_policy(model, test_scenarios, baseline_cache)
         history.append({"epoch": epoch, "train": train_summary, "test": test_summary})
 
-        selection_score = test_summary["mean_total_score_100"]
+        selection_score = (
+            test_summary["mean_reward_gain"]
+            if args.selection_metric == "reward_gain"
+            else test_summary["mean_total_score_100"]
+        )
         if best_score is None or selection_score > best_score:
             best_score = selection_score
             best_checkpoint = {
@@ -143,6 +156,8 @@ def main() -> int:
                 "engine": args.engine,
                 "scenario_count": args.scenario_count,
                 "crops": args.crops,
+                "sampling_mode": args.sampling_mode,
+                "selection_metric": args.selection_metric,
             }
 
         print(
@@ -170,7 +185,8 @@ def main() -> int:
                 "checkpoint": str(checkpoint_path),
                 "metrics": str(metrics_path),
                 "best_epoch": best_checkpoint["epoch"],
-                "best_mean_total_score_100": best_score,
+                "best_selection_value": best_score,
+                "selection_metric": args.selection_metric,
             },
             ensure_ascii=False,
         )

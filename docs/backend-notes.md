@@ -101,6 +101,33 @@ The repository now supports two different learning modes:
 
 The RL path is the direction to use if the goal is "given a scenario, directly generate a strong policy" rather than "imitate one existing policy library."
 
+## Scenario sampling
+
+The repository now supports two scenario-generation modes:
+
+- `grid`:
+  - the original fixed grid
+  - deterministic and easy to compare
+  - capped by the discrete combinations you define
+- `random`:
+  - continuous irrigation and nitrogen budgets
+  - perturbed initial soil water and nitrogen
+  - planting-date perturbations
+  - repeated weather sampling inside each representative regime
+
+Use `random` for RL training once the backend is stable. This is the practical way to move beyond the original 108-scenario cap.
+
+## Reward shaping
+
+The reward family now penalizes:
+
+- irrigation and nitrogen input cost
+- average water and nitrogen stress
+- deviation from the scenario water / nitrogen budgets
+- severe under-irrigation and oversupply behavior
+
+This was added to reduce policy collapse toward obviously unrealistic strategies such as near-zero irrigation paired with maximal nitrogen use.
+
 ## Agronomic reporting
 
 Do not rely only on optimization loss when reporting model quality.
