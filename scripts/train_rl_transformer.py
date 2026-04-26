@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 from pathlib import Path
 import random
@@ -149,7 +150,7 @@ def main() -> int:
         if best_score is None or selection_score > best_score:
             best_score = selection_score
             best_checkpoint = {
-                "model_state_dict": model.state_dict(),
+                "model_state_dict": copy.deepcopy(model.state_dict()),
                 "epoch": epoch,
                 "train_summary": train_summary,
                 "test_summary": test_summary,
