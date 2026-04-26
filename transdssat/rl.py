@@ -6,7 +6,6 @@ from typing import Iterable
 
 from transdssat.domain import Trajectory
 from transdssat.environments.adapters import OfficialDSSATEnvironment
-from transdssat.policy import IRRIGATION_BINS, NITROGEN_BINS
 from transdssat.scenarios import STAGES, SimulationScenario, stage_for_day
 from transdssat.season import SeasonPolicy, StageDecision, policy_date, rollout_proxy_policy, stage_start_days
 
@@ -51,7 +50,7 @@ def stage_indices_for_scenario(scenario: SimulationScenario) -> list[int]:
 try:
     import torch
     from torch import nn
-    from torch.distributions import Categorical
+    from torch.distributions import Dirichlet
 
     TORCH_AVAILABLE = True
 
@@ -75,8 +74,8 @@ try:
             )
             self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
             self.norm = nn.LayerNorm(hidden_dim)
-            self.irrigation_head = nn.Linear(hidden_dim, len(IRRIGATION_BINS))
-            self.nitrogen_head = nn.Linear(hidden_dim, len(NITROGEN_BINS))
+            self.irrigation_head = nn.Linear(hidden_dim, 1)
+            self.nitrogen_head = nn.Linear(hidden_dim, 1)
 
         def forward(
             self,
@@ -89,7 +88,9 @@ try:
             gather_index = stage_indices.unsqueeze(-1).expand(-1, -1, encoded.size(-1))
             stage_hidden = torch.gather(encoded, 1, gather_index)
             stage_hidden = self.norm(stage_hidden)
-            return self.irrigation_head(stage_hidden), self.nitrogen_head(stage_hidden)
+            irrigation_concentration = torch.nn.functional.softplus(self.irrigation_head(stage_hidden).squeeze(-1)) + 0.2
+            nitrogen_concentration = torch.nn.functional.softplus(self.nitrogen_head(stage_hidden).squeeze(-1)) + 0.2
+            return irrigation_concentration, nitrogen_concentration
 
 except ImportError:  # pragma: no cover - optional locally
     TORCH_AVAILABLE = False
@@ -126,26 +127,38 @@ def collate_scenarios_for_rl(
     return features, padding_mask, stage_indices
 
 
-def build_policy_from_bin_actions(
+def build_policy_from_allocations(
     scenario: SimulationScenario,
-    irrigation_bins: Iterable[int],
-    nitrogen_bins: Iterable[int],
+    irrigation_shares: Iterable[float],
+    nitrogen_shares: Iterable[float],
 ) -> SeasonPolicy:
     starts = stage_indices_for_scenario(scenario)
-    irrigation_indices = list(irrigation_bins)
-    nitrogen_indices = list(nitrogen_bins)
+    irrigation_weights = list(irrigation_shares)
+    nitrogen_weights = list(nitrogen_shares)
+    irrigation_total = max(0.0, scenario.irrigation_budget_mm)
+    nitrogen_total = max(0.0, scenario.nitrogen_budget_kg_ha)
     actions: list[StageDecision] = []
     for index, stage in enumerate(STAGES):
-        irrigation_mm = IRRIGATION_BINS[int(irrigation_indices[index])]
-        nitrogen_kg_ha = NITROGEN_BINS[int(nitrogen_indices[index])]
+        if index == len(STAGES) - 1:
+            irrigation_mm = round(
+                irrigation_total - sum(action.irrigation_mm for action in actions),
+                3,
+            )
+            nitrogen_kg_ha = round(
+                nitrogen_total - sum(action.nitrogen_kg_ha for action in actions),
+                3,
+            )
+        else:
+            irrigation_mm = round(irrigation_total * max(0.0, irrigation_weights[index]), 3)
+            nitrogen_kg_ha = round(nitrogen_total * max(0.0, nitrogen_weights[index]), 3)
         day_index = starts[index]
         actions.append(
             StageDecision(
                 stage=stage,
                 day_index=day_index,
                 date=policy_date(scenario.planting_date, day_index),
-                irrigation_mm=irrigation_mm,
-                nitrogen_kg_ha=nitrogen_kg_ha,
+                irrigation_mm=max(0.0, irrigation_mm),
+                nitrogen_kg_ha=max(0.0, nitrogen_kg_ha),
             )
         )
 
@@ -172,24 +185,24 @@ def sample_policies(
     import torch
 
     features, padding_mask, stage_indices = collate_scenarios_for_rl(scenarios)
-    irrigation_logits, nitrogen_logits = model(features, stage_indices, padding_mask=padding_mask)
+    irrigation_concentration, nitrogen_concentration = model(features, stage_indices, padding_mask=padding_mask)
     sampled: list[SampledSeasonPolicy] = []
 
     for row_index, scenario in enumerate(scenarios):
-        irrigation_dist = Categorical(logits=irrigation_logits[row_index])
-        nitrogen_dist = Categorical(logits=nitrogen_logits[row_index])
+        irrigation_dist = Dirichlet(irrigation_concentration[row_index])
+        nitrogen_dist = Dirichlet(nitrogen_concentration[row_index])
 
         if greedy:
-            irrigation_actions = irrigation_logits[row_index].argmax(dim=1)
-            nitrogen_actions = nitrogen_logits[row_index].argmax(dim=1)
-            log_prob = irrigation_dist.log_prob(irrigation_actions).sum() + nitrogen_dist.log_prob(nitrogen_actions).sum()
+            irrigation_actions = irrigation_concentration[row_index] / irrigation_concentration[row_index].sum()
+            nitrogen_actions = nitrogen_concentration[row_index] / nitrogen_concentration[row_index].sum()
+            log_prob = irrigation_dist.log_prob(irrigation_actions) + nitrogen_dist.log_prob(nitrogen_actions)
         else:
             irrigation_actions = irrigation_dist.sample()
             nitrogen_actions = nitrogen_dist.sample()
-            log_prob = irrigation_dist.log_prob(irrigation_actions).sum() + nitrogen_dist.log_prob(nitrogen_actions).sum()
+            log_prob = irrigation_dist.log_prob(irrigation_actions) + nitrogen_dist.log_prob(nitrogen_actions)
 
-        entropy = irrigation_dist.entropy().sum() + nitrogen_dist.entropy().sum()
-        policy = build_policy_from_bin_actions(
+        entropy = irrigation_dist.entropy() + nitrogen_dist.entropy()
+        policy = build_policy_from_allocations(
             scenario,
             irrigation_actions.tolist(),
             nitrogen_actions.tolist(),

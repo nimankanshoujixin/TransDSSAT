@@ -273,10 +273,10 @@ This RL path does not select one policy from a fixed candidate library. Instead,
 - reproductive
 - grain_fill
 
-Each stage outputs:
+The RL policy now allocates the scenario irrigation budget and nitrogen budget across those four stages. In other words, the model learns:
 
-- one irrigation bin
-- one nitrogen bin
+- how much of the seasonal irrigation budget to place into each stage
+- how much of the seasonal nitrogen budget to place into each stage
 
 The sampled season policy is then evaluated by the selected backend, and REINFORCE-style updates optimize DSSAT reward directly.
 

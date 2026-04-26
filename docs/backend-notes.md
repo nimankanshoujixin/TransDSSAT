@@ -95,7 +95,7 @@ The repository now supports two different learning modes:
   - train on existing stage decisions from generated trajectories
   - useful for smoke tests and pipeline verification
 - season-level RL:
-  - directly sample four stage decisions from scenario context
+  - directly allocate irrigation and nitrogen budgets across the four stage decisions
   - evaluate them with DSSAT reward
   - optimize the policy with REINFORCE-style updates
 
