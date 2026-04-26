@@ -86,3 +86,33 @@ Current repository status:
 - the generated weather files now cover cross-year seasons, which is required for winter wheat
 - when a copied template contains multiple experiment files, it prefers the `experiment_file` defined on the scenario, and the DSSAT command can reference that file via `{experiment}`
 - this is a practical bridge from "template runs" to "policy-driven runs", even though full Quzhou-specific cultivar, soil, and weather rendering still remains to be completed
+
+## Policy learning modes
+
+The repository now supports two different learning modes:
+
+- supervised imitation:
+  - train on existing stage decisions from generated trajectories
+  - useful for smoke tests and pipeline verification
+- season-level RL:
+  - directly sample four stage decisions from scenario context
+  - evaluate them with DSSAT reward
+  - optimize the policy with REINFORCE-style updates
+
+The RL path is the direction to use if the goal is "given a scenario, directly generate a strong policy" rather than "imitate one existing policy library."
+
+## Agronomic reporting
+
+Do not rely only on optimization loss when reporting model quality.
+
+Use `scripts/evaluate_policy_report.py` to export agronomic scorecards that summarize:
+
+- yield
+- water and nitrogen inputs
+- water-use efficiency
+- nitrogen-use efficiency
+- cumulative reward
+- average water and nitrogen stress
+- composite `total_score_100`
+
+This makes final model quality interpretable for non-ML users.

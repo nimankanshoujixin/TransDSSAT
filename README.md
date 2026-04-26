@@ -225,6 +225,70 @@ python scripts/train_transformer.py --dataset data/generated/train.jsonl
 
 If `torch` is missing, the script will stop with a clear message.
 
+## Agronomic evaluation
+
+For reporting, use the agronomic report script instead of only reading training loss.
+
+The report outputs:
+
+- yield and yield gain
+- irrigation and nitrogen use
+- water-use efficiency and nitrogen-use efficiency
+- cumulative reward
+- average water and nitrogen stress
+- a composite `total_score_100` for agricultural interpretation
+
+Example:
+
+```bash
+python scripts/evaluate_policy_report.py --engine dssat_official --scenario-count 108 --split test
+```
+
+If you provide an RL checkpoint, the script compares the RL policy against the baseline policy on the same scenarios:
+
+```bash
+python scripts/evaluate_policy_report.py \
+  --engine dssat_official \
+  --scenario-count 108 \
+  --split test \
+  --checkpoint artifacts/rl_transformer/rl_transformer_policy.pt
+```
+
+## RL training
+
+The repository now also includes a season-level RL training entry point.
+
+This RL path does not select one policy from a fixed candidate library. Instead, the model reads the scenario context and directly generates the four stage decisions:
+
+- emergence
+- vegetative
+- reproductive
+- grain_fill
+
+Each stage outputs:
+
+- one irrigation bin
+- one nitrogen bin
+
+The sampled season policy is then evaluated by the selected backend, and REINFORCE-style updates optimize DSSAT reward directly.
+
+Example:
+
+```bash
+python scripts/train_rl_transformer.py \
+  --engine dssat_official \
+  --scenario-count 108 \
+  --epochs 10 \
+  --batch-size 4 \
+  --output-dir artifacts/rl_transformer
+```
+
+Recommended workflow:
+
+1. validate the RL loop on `dssat_proxy`
+2. switch to `dssat_official`
+3. evaluate the trained checkpoint with `scripts/evaluate_policy_report.py`
+
 ## Git and deployment
 
 The repository is designed for Git-based deployment.
