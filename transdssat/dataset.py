@@ -10,8 +10,18 @@ from transdssat.scenarios import SimulationScenario
 from transdssat.season import build_baseline_policy, rollout_proxy_policy
 
 
-def rollout_scenario(scenario: SimulationScenario) -> Trajectory:
-    policy = build_baseline_policy(scenario)
+def rollout_scenario(
+    scenario: SimulationScenario,
+    baseline_name: str = "heuristic",
+    decision_granularity: str = "stage",
+    budget_source: str = "scenario",
+) -> Trajectory:
+    policy = build_baseline_policy(
+        scenario,
+        baseline_name=baseline_name,
+        decision_granularity=decision_granularity,
+        budget_source=budget_source,
+    )
     if scenario.engine_name == "dssat_official":
         return OfficialDSSATEnvironment().evaluate_policy(scenario, policy).trajectory
     return rollout_proxy_policy(scenario, policy)
@@ -23,10 +33,22 @@ def split_name(scenario_id: str, train_ratio: float = 0.8) -> str:
     return "train" if value < train_ratio else "test"
 
 
-def generate_dataset_bundle(scenarios: list[SimulationScenario]) -> dict[str, list[Trajectory]]:
+def generate_dataset_bundle(
+    scenarios: list[SimulationScenario],
+    baseline_name: str = "heuristic",
+    decision_granularity: str = "stage",
+    budget_source: str = "scenario",
+) -> dict[str, list[Trajectory]]:
     bundle = {"train": [], "test": []}
     for scenario in scenarios:
-        bundle[split_name(scenario.scenario_id)].append(rollout_scenario(scenario))
+        bundle[split_name(scenario.scenario_id)].append(
+            rollout_scenario(
+                scenario,
+                baseline_name=baseline_name,
+                decision_granularity=decision_granularity,
+                budget_source=budget_source,
+            )
+        )
     return bundle
 
 

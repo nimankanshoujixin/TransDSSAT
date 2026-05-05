@@ -16,7 +16,13 @@ from transdssat.evaluation import score_trajectory, summarize_scorecards
 from transdssat.policy import training_readiness
 from transdssat.rl import SeasonRLTransformer, evaluate_policy_for_scenario, sample_policies
 from transdssat.scenarios import build_quzhou_scenarios
-from transdssat.season import build_baseline_policy
+from transdssat.season import (
+    BASELINE_BUDGET_SOURCES,
+    BASELINE_NAMES,
+    CONTROL_MODES,
+    DECISION_GRANULARITIES,
+    build_baseline_policy,
+)
 
 
 def batch_scenarios(items, batch_size: int):
@@ -30,11 +36,25 @@ def batch_scenarios(items, batch_size: int):
         yield batch
 
 
-def evaluate_greedy_policy(model, scenarios, baseline_cache):
+def evaluate_greedy_policy(
+    model,
+    scenarios,
+    baseline_cache,
+    baseline_policy_cache,
+    decision_granularity: str,
+    control_mode: str,
+):
     scorecards = []
     rewards = []
     for scenario in scenarios:
-        sampled_policy = sample_policies(model, [scenario], greedy=True)[0].policy
+        sampled_policy = sample_policies(
+            model,
+            [scenario],
+            greedy=True,
+            decision_granularity=decision_granularity,
+            control_mode=control_mode,
+            reference_policies=[baseline_policy_cache[scenario.scenario_id]],
+        )[0].policy
         candidate = evaluate_policy_for_scenario(scenario, sampled_policy)
         baseline = baseline_cache[scenario.scenario_id]
         scorecards.append(score_trajectory(scenario, candidate, baseline))
@@ -55,6 +75,30 @@ def main() -> int:
     parser.add_argument("--lr", type=float, default=5e-4, help="Adam learning rate.")
     parser.add_argument("--entropy-coef", type=float, default=0.01, help="Entropy bonus coefficient.")
     parser.add_argument("--seed", type=int, default=20260426, help="Random seed.")
+    parser.add_argument(
+        "--baseline-name",
+        choices=BASELINE_NAMES,
+        default="literature_ncp",
+        help="Reference baseline used for reward-gain comparison.",
+    )
+    parser.add_argument(
+        "--baseline-budget-source",
+        choices=BASELINE_BUDGET_SOURCES,
+        default="scenario",
+        help="Use paper fixed totals or scale the literature policy to each scenario budget.",
+    )
+    parser.add_argument(
+        "--decision-granularity",
+        choices=DECISION_GRANULARITIES,
+        default="stage",
+        help="Policy output granularity for the RL controller.",
+    )
+    parser.add_argument(
+        "--control-mode",
+        choices=CONTROL_MODES,
+        default="joint",
+        help="Optimize irrigation only, nitrogen only, or both jointly.",
+    )
     parser.add_argument(
         "--selection-metric",
         choices=("reward_gain", "score"),
@@ -85,8 +129,16 @@ def main() -> int:
     test_scenarios = [scenario for scenario in scenarios if split_name(scenario.scenario_id) == "test"]
 
     baseline_cache = {}
+    baseline_policy_cache = {}
     for scenario in scenarios:
-        baseline_cache[scenario.scenario_id] = evaluate_policy_for_scenario(scenario, build_baseline_policy(scenario))
+        baseline_policy = build_baseline_policy(
+            scenario,
+            baseline_name=args.baseline_name,
+            decision_granularity=args.decision_granularity,
+            budget_source=args.baseline_budget_source,
+        )
+        baseline_policy_cache[scenario.scenario_id] = baseline_policy
+        baseline_cache[scenario.scenario_id] = evaluate_policy_for_scenario(scenario, baseline_policy)
 
     model = SeasonRLTransformer()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -106,7 +158,14 @@ def main() -> int:
 
         for scenario_batch in batch_scenarios(shuffled, args.batch_size):
             optimizer.zero_grad()
-            sampled = sample_policies(model, scenario_batch, greedy=False)
+            sampled = sample_policies(
+                model,
+                scenario_batch,
+                greedy=False,
+                decision_granularity=args.decision_granularity,
+                control_mode=args.control_mode,
+                reference_policies=[baseline_policy_cache[scenario.scenario_id] for scenario in scenario_batch],
+            )
 
             rewards = []
             baselines = []
@@ -139,7 +198,14 @@ def main() -> int:
             "mean_reward_gain_vs_baseline": round(sum(epoch_gains) / max(1, len(epoch_gains)), 6),
             "scenario_count": len(epoch_rewards),
         }
-        test_summary, _ = evaluate_greedy_policy(model, test_scenarios, baseline_cache)
+        test_summary, _ = evaluate_greedy_policy(
+            model,
+            test_scenarios,
+            baseline_cache,
+            baseline_policy_cache,
+            decision_granularity=args.decision_granularity,
+            control_mode=args.control_mode,
+        )
         history.append({"epoch": epoch, "train": train_summary, "test": test_summary})
 
         selection_score = (
@@ -159,6 +225,10 @@ def main() -> int:
                 "crops": args.crops,
                 "sampling_mode": args.sampling_mode,
                 "selection_metric": args.selection_metric,
+                "baseline_name": args.baseline_name,
+                "baseline_budget_source": args.baseline_budget_source,
+                "decision_granularity": args.decision_granularity,
+                "control_mode": args.control_mode,
             }
 
         print(

@@ -11,7 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from transdssat.dataset import rollout_scenario
 from transdssat.scenarios import build_quzhou_scenarios
-from transdssat.season import build_baseline_policy
+from transdssat.season import BASELINE_BUDGET_SOURCES, BASELINE_NAMES, DECISION_GRANULARITIES, build_baseline_policy
 
 
 def main() -> int:
@@ -24,6 +24,9 @@ def main() -> int:
     parser.add_argument("--crop", default="wheat", help="Crop filter: wheat or maize")
     parser.add_argument("--weather-regime", default="normal", help="dry, normal, wet")
     parser.add_argument("--sampling-mode", choices=("grid", "random"), default="grid")
+    parser.add_argument("--baseline-name", choices=BASELINE_NAMES, default="literature_ncp")
+    parser.add_argument("--baseline-budget-source", choices=BASELINE_BUDGET_SOURCES, default="scenario")
+    parser.add_argument("--decision-granularity", choices=DECISION_GRANULARITIES, default="stage")
     parser.add_argument("--seed", type=int, default=20260426)
     args = parser.parse_args()
 
@@ -38,8 +41,18 @@ def main() -> int:
         for scenario in scenarios
         if scenario.crop_spec.crop_name == args.crop and scenario.weather_regime == args.weather_regime
     )
-    policy = build_baseline_policy(scenario)
-    trajectory = rollout_scenario(scenario)
+    policy = build_baseline_policy(
+        scenario,
+        baseline_name=args.baseline_name,
+        decision_granularity=args.decision_granularity,
+        budget_source=args.baseline_budget_source,
+    )
+    trajectory = rollout_scenario(
+        scenario,
+        baseline_name=args.baseline_name,
+        decision_granularity=args.decision_granularity,
+        budget_source=args.baseline_budget_source,
+    )
     print(
         json.dumps(
             {

@@ -7,7 +7,16 @@ from typing import Iterable
 from transdssat.domain import Trajectory
 from transdssat.environments.adapters import OfficialDSSATEnvironment
 from transdssat.scenarios import STAGES, SimulationScenario, stage_for_day
-from transdssat.season import SeasonPolicy, StageDecision, policy_date, rollout_proxy_policy, stage_start_days
+from transdssat.season import (
+    CONTROL_MODES,
+    DECISION_GRANULARITIES,
+    SeasonPolicy,
+    StageDecision,
+    apply_control_mode,
+    policy_date,
+    rollout_proxy_policy,
+    stage_start_days,
+)
 
 
 def evaluate_policy_for_scenario(scenario: SimulationScenario, policy: SeasonPolicy) -> Trajectory:
@@ -80,16 +89,24 @@ try:
         def forward(
             self,
             x: torch.Tensor,
-            stage_indices: torch.Tensor,
+            stage_indices: torch.Tensor | None = None,
             padding_mask: torch.Tensor | None = None,
+            decision_granularity: str = "stage",
         ) -> tuple[torch.Tensor, torch.Tensor]:
             hidden = self.input_projection(x)
             encoded = self.encoder(hidden, src_key_padding_mask=padding_mask)
-            gather_index = stage_indices.unsqueeze(-1).expand(-1, -1, encoded.size(-1))
-            stage_hidden = torch.gather(encoded, 1, gather_index)
-            stage_hidden = self.norm(stage_hidden)
-            irrigation_concentration = torch.nn.functional.softplus(self.irrigation_head(stage_hidden).squeeze(-1)) + 0.2
-            nitrogen_concentration = torch.nn.functional.softplus(self.nitrogen_head(stage_hidden).squeeze(-1)) + 0.2
+            if decision_granularity == "stage":
+                if stage_indices is None:
+                    raise RuntimeError("Stage indices are required for stage-level decision granularity.")
+                gather_index = stage_indices.unsqueeze(-1).expand(-1, -1, encoded.size(-1))
+                decision_hidden = torch.gather(encoded, 1, gather_index)
+            elif decision_granularity == "daily":
+                decision_hidden = encoded
+            else:
+                raise ValueError(f"Unsupported decision granularity: {decision_granularity}")
+            decision_hidden = self.norm(decision_hidden)
+            irrigation_concentration = torch.nn.functional.softplus(self.irrigation_head(decision_hidden).squeeze(-1)) + 0.2
+            nitrogen_concentration = torch.nn.functional.softplus(self.nitrogen_head(decision_hidden).squeeze(-1)) + 0.2
             return irrigation_concentration, nitrogen_concentration
 
 except ImportError:  # pragma: no cover - optional locally
@@ -175,26 +192,115 @@ def build_policy_from_allocations(
     )
 
 
+def _sparsify_daily_allocations(total: float, shares: list[float], min_event_amount: float) -> list[float]:
+    if total <= 0.0:
+        return [0.0 for _ in shares]
+    raw_amounts = [max(0.0, total * share) for share in shares]
+    keep = [index for index, amount in enumerate(raw_amounts) if amount >= min_event_amount]
+    if not keep:
+        keep = [max(range(len(raw_amounts)), key=lambda idx: raw_amounts[idx])]
+    kept_total = sum(raw_amounts[index] for index in keep)
+    scale = total / max(1e-6, kept_total)
+    allocations = [0.0 for _ in shares]
+    running = 0.0
+    for keep_index, day_index in enumerate(keep):
+        if keep_index == len(keep) - 1:
+            value = round(total - running, 3)
+        else:
+            value = round(raw_amounts[day_index] * scale, 3)
+            running += value
+        allocations[day_index] = max(0.0, value)
+    return allocations
+
+
+def build_daily_policy_from_allocations(
+    scenario: SimulationScenario,
+    irrigation_shares: Iterable[float],
+    nitrogen_shares: Iterable[float],
+    irrigation_min_event_mm: float = 1.0,
+    nitrogen_min_event_kg_ha: float = 1.0,
+) -> SeasonPolicy:
+    irrigation_allocations = _sparsify_daily_allocations(
+        scenario.irrigation_budget_mm,
+        list(irrigation_shares),
+        min_event_amount=irrigation_min_event_mm,
+    )
+    nitrogen_allocations = _sparsify_daily_allocations(
+        scenario.nitrogen_budget_kg_ha,
+        list(nitrogen_shares),
+        min_event_amount=nitrogen_min_event_kg_ha,
+    )
+    actions: list[StageDecision] = []
+    for day_index, (irrigation_mm, nitrogen_kg_ha) in enumerate(zip(irrigation_allocations, nitrogen_allocations)):
+        if irrigation_mm <= 0.0 and nitrogen_kg_ha <= 0.0:
+            continue
+        stage, _ = stage_for_day(day_index, scenario.crop_spec.season_length_days)
+        actions.append(
+            StageDecision(
+                stage=stage,
+                day_index=day_index,
+                date=policy_date(scenario.planting_date, day_index),
+                irrigation_mm=round(irrigation_mm, 3),
+                nitrogen_kg_ha=round(nitrogen_kg_ha, 3),
+            )
+        )
+
+    policy_hash = hashlib.sha256(
+        "|".join(
+            f"{action.stage}:{action.day_index}:{action.irrigation_mm}:{action.nitrogen_kg_ha}"
+            for action in actions
+        ).encode("utf-8")
+    ).hexdigest()[:10]
+    return SeasonPolicy(
+        policy_id=f"{scenario.scenario_id}-rl-daily-{policy_hash}",
+        scenario_id=scenario.scenario_id,
+        actions=actions,
+    )
+
+
 def sample_policies(
     model: "SeasonRLTransformer",
     scenarios: list[SimulationScenario],
     greedy: bool = False,
+    decision_granularity: str = "stage",
+    control_mode: str = "joint",
+    reference_policies: list[SeasonPolicy] | None = None,
 ) -> list[SampledSeasonPolicy]:
     if not TORCH_AVAILABLE:
         raise RuntimeError("PyTorch is required to sample RL policies.")
+    if decision_granularity not in DECISION_GRANULARITIES:
+        raise ValueError(f"Unsupported decision granularity: {decision_granularity}")
+    if control_mode not in CONTROL_MODES:
+        raise ValueError(f"Unsupported control mode: {control_mode}")
+    if control_mode != "joint" and reference_policies is None:
+        raise RuntimeError("Reference policies are required for water_only or nitrogen_only control modes.")
     import torch
 
     features, padding_mask, stage_indices = collate_scenarios_for_rl(scenarios)
-    irrigation_concentration, nitrogen_concentration = model(features, stage_indices, padding_mask=padding_mask)
+    model_stage_indices = stage_indices if decision_granularity == "stage" else None
+    irrigation_concentration, nitrogen_concentration = model(
+        features,
+        model_stage_indices,
+        padding_mask=padding_mask,
+        decision_granularity=decision_granularity,
+    )
     sampled: list[SampledSeasonPolicy] = []
 
     for row_index, scenario in enumerate(scenarios):
-        irrigation_dist = Dirichlet(irrigation_concentration[row_index])
-        nitrogen_dist = Dirichlet(nitrogen_concentration[row_index])
+        if decision_granularity == "stage":
+            irrigation_alpha = irrigation_concentration[row_index]
+            nitrogen_alpha = nitrogen_concentration[row_index]
+        else:
+            valid_length = scenario.crop_spec.season_length_days
+            irrigation_alpha = irrigation_concentration[row_index, :valid_length]
+            nitrogen_alpha = nitrogen_concentration[row_index, :valid_length]
+
+        irrigation_dist = Dirichlet(irrigation_alpha)
+        nitrogen_dist = Dirichlet(nitrogen_alpha)
 
         if greedy:
-            irrigation_actions = irrigation_concentration[row_index] / irrigation_concentration[row_index].sum()
-            nitrogen_actions = nitrogen_concentration[row_index] / nitrogen_concentration[row_index].sum()
+            irrigation_actions = irrigation_alpha / irrigation_alpha.sum()
+            nitrogen_actions = nitrogen_alpha / nitrogen_alpha.sum()
             log_prob = irrigation_dist.log_prob(irrigation_actions) + nitrogen_dist.log_prob(nitrogen_actions)
         else:
             irrigation_actions = irrigation_dist.sample()
@@ -202,11 +308,20 @@ def sample_policies(
             log_prob = irrigation_dist.log_prob(irrigation_actions) + nitrogen_dist.log_prob(nitrogen_actions)
 
         entropy = irrigation_dist.entropy() + nitrogen_dist.entropy()
-        policy = build_policy_from_allocations(
-            scenario,
-            irrigation_actions.tolist(),
-            nitrogen_actions.tolist(),
-        )
+        if decision_granularity == "daily":
+            policy = build_daily_policy_from_allocations(
+                scenario,
+                irrigation_actions.tolist(),
+                nitrogen_actions.tolist(),
+            )
+        else:
+            policy = build_policy_from_allocations(
+                scenario,
+                irrigation_actions.tolist(),
+                nitrogen_actions.tolist(),
+            )
+        if control_mode != "joint":
+            policy = apply_control_mode(policy, reference_policies[row_index], control_mode=control_mode)
         sampled.append(SampledSeasonPolicy(policy=policy, log_prob=log_prob, entropy=entropy))
 
     return sampled

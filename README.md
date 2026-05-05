@@ -19,7 +19,7 @@ The codebase is now organized around season-level decision evaluation instead of
 - `transdssat/scenarios.py`
   Builds Quzhou-style scenarios. It now supports both the legacy fixed grid and random scenario sampling with perturbed soil initials, planting dates, and continuous budget ranges.
 - `transdssat/season.py`
-  Defines season policies as stage-based actions and provides the baseline policy generator.
+  Defines season policies, control-mode merging, and both heuristic and literature-informed baseline generators.
 - `transdssat/environments/proxy.py`
   Contains local proxy simulators for rapid iteration.
 - `transdssat/environments/adapters.py`
@@ -37,14 +37,16 @@ The codebase is now organized around season-level decision evaluation instead of
 
 ## Decision format
 
-The policy is season-level, not daily online control.
+The policy remains season-level in the DSSAT sense, but the repository now supports two controller granularities:
 
-Each policy contains one action for each major stage:
-
-- `emergence`
-- `vegetative`
-- `reproductive`
-- `grain_fill`
+- `stage`
+  One action for each major growth stage:
+  - `emergence`
+  - `vegetative`
+  - `reproductive`
+  - `grain_fill`
+- `daily`
+  One budget-allocation policy across daily slots, later sparsified into a practical set of daily DSSAT management events.
 
 Each action has:
 
@@ -53,7 +55,20 @@ Each action has:
 - `irrigation_mm`
 - `nitrogen_kg_ha`
 
-This matches DSSAT better than forcing a strict daily `step(action)` loop.
+This keeps DSSAT in its natural whole-season simulation mode while allowing finer decision schedules when needed.
+
+## Baselines
+
+The repository now supports two baseline families:
+
+- `heuristic`
+  The original stage-split baseline defined inside the project.
+- `literature_ncp`
+  A literature-informed North China Plain wheat-maize baseline that uses published critical irrigation timings and split-N management structure, with either:
+  - `scenario` budget source: preserve the paper's timing structure but scale totals to the current scenario budget
+  - `paper` budget source: use the paper's reported seasonal water and nitrogen totals directly
+
+The current RL and reporting scripts default to `literature_ncp`, not the older heuristic baseline.
 
 ## Reward logic
 
@@ -199,6 +214,18 @@ To move beyond the legacy 108-scenario grid, use random sampling:
 python scripts/generate_dataset.py --output-dir data/generated_random --scenario-count 400 --sampling-mode random --engines dssat_proxy
 ```
 
+To generate literature-baseline trajectories instead of heuristic ones:
+
+```bash
+python scripts/generate_dataset.py \
+  --output-dir data/generated_lit \
+  --scenario-count 120 \
+  --sampling-mode random \
+  --engines dssat_proxy \
+  --baseline-name literature_ncp \
+  --baseline-budget-source scenario
+```
+
 To restrict generation to one crop:
 
 ```bash
@@ -249,7 +276,13 @@ The report outputs:
 Example:
 
 ```bash
-python scripts/evaluate_policy_report.py --engine dssat_official --scenario-count 108 --split test
+python scripts/evaluate_policy_report.py \
+  --engine dssat_official \
+  --scenario-count 120 \
+  --sampling-mode random \
+  --split test \
+  --baseline-name literature_ncp \
+  --baseline-budget-source scenario
 ```
 
 If you provide an RL checkpoint, the script compares the RL policy against the baseline policy on the same scenarios:
@@ -257,26 +290,34 @@ If you provide an RL checkpoint, the script compares the RL policy against the b
 ```bash
 python scripts/evaluate_policy_report.py \
   --engine dssat_official \
-  --scenario-count 108 \
+  --scenario-count 120 \
+  --sampling-mode random \
   --split test \
+  --baseline-name literature_ncp \
+  --baseline-budget-source scenario \
   --checkpoint artifacts/rl_transformer/rl_transformer_policy.pt
 ```
 
 ## RL training
 
-The repository now also includes a season-level RL training entry point.
+The repository now also includes a season-level RL training entry point with three control modes:
 
-This RL path does not select one policy from a fixed candidate library. Instead, the model reads the scenario context and directly generates the four stage decisions:
+- `joint`
+  jointly control irrigation and nitrogen
+- `water_only`
+  optimize irrigation while keeping nitrogen on the selected baseline
+- `nitrogen_only`
+  optimize nitrogen while keeping irrigation on the selected baseline
 
-- emergence
-- vegetative
-- reproductive
-- grain_fill
+This RL path does not select one policy from a fixed candidate library. Instead, the model reads the scenario context and directly generates either:
 
-The RL policy now allocates the scenario irrigation budget and nitrogen budget across those four stages. In other words, the model learns:
+- four stage decisions, or
+- one daily budget-allocation policy
 
-- how much of the seasonal irrigation budget to place into each stage
-- how much of the seasonal nitrogen budget to place into each stage
+The RL policy allocates the scenario irrigation budget and nitrogen budget across the selected decision grid. In other words, the model learns:
+
+- how much of the seasonal irrigation budget to place into each control point
+- how much of the seasonal nitrogen budget to place into each control point
 
 The sampled season policy is then evaluated by the selected backend, and REINFORCE-style updates optimize DSSAT reward directly.
 
@@ -287,16 +328,51 @@ python scripts/train_rl_transformer.py \
   --engine dssat_official \
   --scenario-count 300 \
   --sampling-mode random \
+  --baseline-name literature_ncp \
+  --baseline-budget-source scenario \
+  --control-mode joint \
+  --decision-granularity stage \
   --epochs 10 \
   --batch-size 4 \
   --output-dir artifacts/rl_transformer
 ```
 
+Daily-granularity training is also available, but it is materially slower than stage-level training:
+
+```bash
+python scripts/train_rl_transformer.py \
+  --engine dssat_proxy \
+  --scenario-count 120 \
+  --sampling-mode random \
+  --baseline-name literature_ncp \
+  --control-mode joint \
+  --decision-granularity daily \
+  --epochs 5 \
+  --batch-size 4 \
+  --output-dir artifacts/rl_transformer_daily
+```
+
 Recommended workflow:
 
 1. validate the RL loop on `dssat_proxy` with `--sampling-mode random`
-2. switch to `dssat_official`
-3. evaluate the trained checkpoint with `scripts/evaluate_policy_report.py`
+2. run the three ablation modes: `water_only`, `nitrogen_only`, `joint`
+3. switch the best settings to `dssat_official`
+4. evaluate the trained checkpoint with `scripts/evaluate_policy_report.py`
+
+For a combined ablation summary after the three runs finish:
+
+```bash
+python scripts/run_ablation_report.py \
+  --engine dssat_official \
+  --scenario-count 120 \
+  --sampling-mode random \
+  --split test \
+  --baseline-name literature_ncp \
+  --checkpoint-water artifacts/rl_water/rl_transformer_policy.pt \
+  --checkpoint-nitrogen artifacts/rl_nitrogen/rl_transformer_policy.pt \
+  --checkpoint-joint artifacts/rl_joint/rl_transformer_policy.pt \
+  --output artifacts/rl_ablation/report.json
+```
 
 ## Git and deployment
 

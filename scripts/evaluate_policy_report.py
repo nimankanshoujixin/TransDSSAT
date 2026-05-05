@@ -13,7 +13,13 @@ from transdssat.dataset import split_name
 from transdssat.evaluation import score_trajectory, summarize_scorecards
 from transdssat.rl import SeasonRLTransformer, evaluate_policy_for_scenario, sample_policies
 from transdssat.scenarios import build_quzhou_scenarios
-from transdssat.season import build_baseline_policy
+from transdssat.season import (
+    BASELINE_BUDGET_SOURCES,
+    BASELINE_NAMES,
+    CONTROL_MODES,
+    DECISION_GRANULARITIES,
+    build_baseline_policy,
+)
 
 
 def main() -> int:
@@ -26,6 +32,10 @@ def main() -> int:
     parser.add_argument("--checkpoint", default=None, help="Optional RL checkpoint path. Omit for baseline-only report.")
     parser.add_argument("--output", default=None, help="Optional JSON report path.")
     parser.add_argument("--seed", type=int, default=20260426)
+    parser.add_argument("--baseline-name", choices=BASELINE_NAMES, default="literature_ncp")
+    parser.add_argument("--baseline-budget-source", choices=BASELINE_BUDGET_SOURCES, default="scenario")
+    parser.add_argument("--decision-granularity", choices=DECISION_GRANULARITIES, default="stage")
+    parser.add_argument("--control-mode", choices=CONTROL_MODES, default="joint")
     args = parser.parse_args()
 
     scenarios = build_quzhou_scenarios(
@@ -49,12 +59,24 @@ def main() -> int:
 
     scorecards = []
     for scenario in scenarios:
-        baseline_policy = build_baseline_policy(scenario)
+        baseline_policy = build_baseline_policy(
+            scenario,
+            baseline_name=args.baseline_name,
+            decision_granularity=args.decision_granularity,
+            budget_source=args.baseline_budget_source,
+        )
         baseline_trajectory = evaluate_policy_for_scenario(scenario, baseline_policy)
         if model is None:
             candidate_trajectory = baseline_trajectory
         else:
-            sampled_policy = sample_policies(model, [scenario], greedy=True)[0].policy
+            sampled_policy = sample_policies(
+                model,
+                [scenario],
+                greedy=True,
+                decision_granularity=args.decision_granularity,
+                control_mode=args.control_mode,
+                reference_policies=[baseline_policy],
+            )[0].policy
             candidate_trajectory = evaluate_policy_for_scenario(scenario, sampled_policy)
 
         scorecards.append(score_trajectory(scenario, candidate_trajectory, baseline_trajectory))
@@ -65,6 +87,10 @@ def main() -> int:
         "split": args.split,
         "scenario_count": len(scorecards),
         "mode": "rl" if model is not None else "baseline",
+        "baseline_name": args.baseline_name,
+        "baseline_budget_source": args.baseline_budget_source,
+        "decision_granularity": args.decision_granularity,
+        "control_mode": args.control_mode,
         "summary": summary,
         "scorecards": [card.to_dict() for card in scorecards],
     }

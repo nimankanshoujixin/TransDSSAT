@@ -11,6 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from transdssat.dataset import generate_dataset_bundle, save_dataset_bundle
 from transdssat.scenarios import build_quzhou_scenarios
+from transdssat.season import BASELINE_BUDGET_SOURCES, BASELINE_NAMES, DECISION_GRANULARITIES
 
 
 def main() -> int:
@@ -40,6 +41,9 @@ def main() -> int:
         default=None,
         help="Optional crop filter, for example: maize wheat",
     )
+    parser.add_argument("--baseline-name", choices=BASELINE_NAMES, default="heuristic")
+    parser.add_argument("--baseline-budget-source", choices=BASELINE_BUDGET_SOURCES, default="scenario")
+    parser.add_argument("--decision-granularity", choices=DECISION_GRANULARITIES, default="stage")
     parser.add_argument("--seed", type=int, default=20260426, help="Scenario sampling seed.")
     args = parser.parse_args()
 
@@ -50,7 +54,12 @@ def main() -> int:
         sampling_mode=args.sampling_mode,
         seed=args.seed,
     )
-    bundle = generate_dataset_bundle(scenarios)
+    bundle = generate_dataset_bundle(
+        scenarios,
+        baseline_name=args.baseline_name,
+        decision_granularity=args.decision_granularity,
+        budget_source=args.baseline_budget_source,
+    )
     metadata = save_dataset_bundle(args.output_dir, bundle)
     print(json.dumps(metadata, indent=2, ensure_ascii=False))
     return 0
