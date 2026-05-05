@@ -258,15 +258,24 @@ def build_daily_policy_from_allocations(
     irrigation_max_events: int = 6,
     nitrogen_max_events: int = 6,
 ) -> SeasonPolicy:
+    crop_masks = STAGE_ACTION_MASKS[scenario.crop_spec.crop_name]
+    masked_irrigation_shares: list[float] = []
+    masked_nitrogen_shares: list[float] = []
+    for day_index, (ir_share, n_share) in enumerate(zip(irrigation_shares, nitrogen_shares)):
+        stage_name, _ = stage_for_day(day_index, scenario.crop_spec.season_length_days)
+        stage_pos = STAGES.index(stage_name)
+        masked_irrigation_shares.append(ir_share * crop_masks["irrigation"][stage_pos])
+        masked_nitrogen_shares.append(n_share * crop_masks["nitrogen"][stage_pos])
+
     irrigation_allocations = _sparsify_daily_allocations(
         scenario.irrigation_budget_mm,
-        list(irrigation_shares),
+        masked_irrigation_shares,
         min_event_amount=irrigation_min_event_mm,
         max_events=irrigation_max_events,
     )
     nitrogen_allocations = _sparsify_daily_allocations(
         scenario.nitrogen_budget_kg_ha,
-        list(nitrogen_shares),
+        masked_nitrogen_shares,
         min_event_amount=nitrogen_min_event_kg_ha,
         max_events=nitrogen_max_events,
     )
