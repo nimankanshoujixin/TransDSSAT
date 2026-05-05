@@ -156,6 +156,8 @@ def build_irrigation_lines(policy: list[PolicyRow], planting_yyddd: str) -> list
         "@I IDATE  IROP IRVAL",
     ]
     for row in policy:
+        if row.irrigation_mm <= 0.0:
+            continue
         event_date = planting_date + timedelta(days=row.day_index)
         lines.append(f" 1 {date_to_yyddd(event_date)} IR001 {row.irrigation_mm:5.1f}")
     return lines
@@ -165,6 +167,8 @@ def build_fertilizer_lines(policy: list[PolicyRow], planting_yyddd: str) -> list
     planting_date = yyddd_to_date(planting_yyddd)
     lines = ["@F FDATE  FMCD  FACD  FDEP  FAMN  FAMP  FAMK  FAMC  FAMO  FOCD FERNAME"]
     for row in policy:
+        if row.nitrogen_kg_ha <= 0.0:
+            continue
         event_date = planting_date + timedelta(days=row.day_index)
         lines.append(
             f" 1 {date_to_yyddd(event_date)} FE001 AP001    10 {row.nitrogen_kg_ha:5.1f}"
