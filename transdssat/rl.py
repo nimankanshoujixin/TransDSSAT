@@ -18,6 +18,17 @@ from transdssat.season import (
     stage_start_days,
 )
 
+STAGE_ACTION_MASKS = {
+    "wheat": {
+        "irrigation": (0.0, 1.0, 1.0, 0.0),
+        "nitrogen": (1.0, 1.0, 1.0, 0.0),
+    },
+    "maize": {
+        "irrigation": (1.0, 1.0, 1.0, 0.0),
+        "nitrogen": (1.0, 1.0, 1.0, 0.0),
+    },
+}
+
 
 def evaluate_policy_for_scenario(scenario: SimulationScenario, policy: SeasonPolicy) -> Trajectory:
     if scenario.engine_name == "dssat_official":
@@ -150,8 +161,25 @@ def build_policy_from_allocations(
     nitrogen_shares: Iterable[float],
 ) -> SeasonPolicy:
     starts = stage_indices_for_scenario(scenario)
-    irrigation_weights = list(irrigation_shares)
-    nitrogen_weights = list(nitrogen_shares)
+    crop_masks = STAGE_ACTION_MASKS[scenario.crop_spec.crop_name]
+    irrigation_weights = [
+        share * mask
+        for share, mask in zip(irrigation_shares, crop_masks["irrigation"])
+    ]
+    nitrogen_weights = [
+        share * mask
+        for share, mask in zip(nitrogen_shares, crop_masks["nitrogen"])
+    ]
+    irrigation_sum = sum(irrigation_weights)
+    nitrogen_sum = sum(nitrogen_weights)
+    if irrigation_sum <= 1e-9:
+        irrigation_weights = list(crop_masks["irrigation"])
+        irrigation_sum = sum(irrigation_weights)
+    if nitrogen_sum <= 1e-9:
+        nitrogen_weights = list(crop_masks["nitrogen"])
+        nitrogen_sum = sum(nitrogen_weights)
+    irrigation_weights = [weight / irrigation_sum for weight in irrigation_weights]
+    nitrogen_weights = [weight / nitrogen_sum for weight in nitrogen_weights]
     irrigation_total = max(0.0, scenario.irrigation_budget_mm)
     nitrogen_total = max(0.0, scenario.nitrogen_budget_kg_ha)
     actions: list[StageDecision] = []
