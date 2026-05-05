@@ -220,13 +220,21 @@ def build_policy_from_allocations(
     )
 
 
-def _sparsify_daily_allocations(total: float, shares: list[float], min_event_amount: float) -> list[float]:
+def _sparsify_daily_allocations(
+    total: float,
+    shares: list[float],
+    min_event_amount: float,
+    max_events: int,
+) -> list[float]:
     if total <= 0.0:
         return [0.0 for _ in shares]
     raw_amounts = [max(0.0, total * share) for share in shares]
     keep = [index for index, amount in enumerate(raw_amounts) if amount >= min_event_amount]
     if not keep:
         keep = [max(range(len(raw_amounts)), key=lambda idx: raw_amounts[idx])]
+    if len(keep) > max_events:
+        keep = sorted(keep, key=lambda idx: raw_amounts[idx], reverse=True)[:max_events]
+        keep.sort()
     kept_total = sum(raw_amounts[index] for index in keep)
     scale = total / max(1e-6, kept_total)
     allocations = [0.0 for _ in shares]
@@ -247,16 +255,20 @@ def build_daily_policy_from_allocations(
     nitrogen_shares: Iterable[float],
     irrigation_min_event_mm: float = 1.0,
     nitrogen_min_event_kg_ha: float = 1.0,
+    irrigation_max_events: int = 6,
+    nitrogen_max_events: int = 6,
 ) -> SeasonPolicy:
     irrigation_allocations = _sparsify_daily_allocations(
         scenario.irrigation_budget_mm,
         list(irrigation_shares),
         min_event_amount=irrigation_min_event_mm,
+        max_events=irrigation_max_events,
     )
     nitrogen_allocations = _sparsify_daily_allocations(
         scenario.nitrogen_budget_kg_ha,
         list(nitrogen_shares),
         min_event_amount=nitrogen_min_event_kg_ha,
+        max_events=nitrogen_max_events,
     )
     actions: list[StageDecision] = []
     for day_index, (irrigation_mm, nitrogen_kg_ha) in enumerate(zip(irrigation_allocations, nitrogen_allocations)):
