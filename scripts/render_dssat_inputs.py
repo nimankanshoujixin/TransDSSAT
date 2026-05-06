@@ -234,26 +234,7 @@ def replace_irrigation_block(lines: list[str], replacement: list[str]) -> list[s
         for index in range(start + 1, len(lines))
         if lines[index].startswith("*FERTILIZERS")
     )
-
-    original = lines[start:end]
-    first_treatment_start = None
-    second_treatment_start = None
-    for index, line in enumerate(original):
-        if line.startswith("@I  EFIR") and first_treatment_start is None:
-            first_treatment_start = index
-            continue
-        if first_treatment_start is not None and line.startswith("@I  EFIR"):
-            next_line = original[index + 1] if index + 1 < len(original) else ""
-            if next_line.strip().startswith("2"):
-                second_treatment_start = index
-                break
-
-    if first_treatment_start is None:
-        raise RuntimeError("Could not locate treatment 1 irrigation block.")
-
-    kept_prefix = original[:first_treatment_start]
-    kept_suffix = original[second_treatment_start:] if second_treatment_start is not None else []
-    new_block = kept_prefix + replacement + kept_suffix
+    new_block = [lines[start]] + replacement
     return lines[:start] + new_block + lines[end:]
 
 
@@ -264,11 +245,7 @@ def replace_fertilizer_block(lines: list[str], replacement: list[str]) -> list[s
         for index in range(start + 1, len(lines))
         if lines[index].startswith("*SIMULATION CONTROLS")
     )
-    original = lines[start:end]
-    header_index = next(index for index, line in enumerate(original) if line.startswith("@F"))
-    prefix = original[:header_index]
-    suffix = [line for line in original[header_index + 1 :] if not line.strip().startswith("1")]
-    new_block = prefix + replacement + suffix
+    new_block = [lines[start]] + replacement
     return lines[:start] + new_block + lines[end:]
 
 
