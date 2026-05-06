@@ -148,48 +148,55 @@ def extract_field_metadata(lines: list[str]) -> tuple[str, float, float, float]:
     raise RuntimeError("Could not locate field metadata in DSSAT experiment file.")
 
 
-def replace_treatments_block(lines: list[str]) -> list[str]:
+def extract_treatment_ids(lines: list[str]) -> list[int]:
     start = next(index for index, line in enumerate(lines) if line.startswith("*TREATMENTS"))
     end = next(
         index
         for index in range(start + 1, len(lines))
         if lines[index].startswith("*CULTIVARS")
     )
-    original = lines[start:end]
-    header_index = next(index for index, line in enumerate(original) if line.startswith("@N "))
-    first_treatment_line = next(
-        line for line in original[header_index + 1 :] if line.strip().startswith("1 ")
-    )
-    new_block = original[: header_index + 1] + [first_treatment_line]
-    return lines[:start] + new_block + lines[end:]
-
-
-def build_irrigation_lines(policy: list[PolicyRow], planting_yyddd: str) -> list[str]:
-    planting_date = yyddd_to_date(planting_yyddd)
-    lines = [
-        "@I  EFIR  IDEP  ITHR  IEPT  IOFF  IAME  IAMT IRNAME",
-        " 1     1   -99   -99   -99   -99   -99   -99 IR001",
-        "@I IDATE  IROP IRVAL",
-    ]
-    for row in policy:
-        if row.irrigation_mm <= 0.0:
+    treatment_ids: list[int] = []
+    for line in lines[start:end]:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("*") or stripped.startswith("@"):
             continue
-        event_date = planting_date + timedelta(days=row.day_index)
-        lines.append(f" 1 {date_to_yyddd(event_date)} IR001 {row.irrigation_mm:5.1f}")
+        first = stripped.split()[0]
+        if first.isdigit():
+            treatment_ids.append(int(first))
+    return treatment_ids or [1]
+
+
+def build_irrigation_lines(policy: list[PolicyRow], planting_yyddd: str, treatment_ids: list[int]) -> list[str]:
+    planting_date = yyddd_to_date(planting_yyddd)
+    lines: list[str] = []
+    for treatment_id in treatment_ids:
+        lines.extend(
+            [
+                "@I  EFIR  IDEP  ITHR  IEPT  IOFF  IAME  IAMT IRNAME",
+                f" {treatment_id}     1   -99   -99   -99   -99   -99   -99 IR001",
+                "@I IDATE  IROP IRVAL",
+            ]
+        )
+        for row in policy:
+            if row.irrigation_mm <= 0.0:
+                continue
+            event_date = planting_date + timedelta(days=row.day_index)
+            lines.append(f" {treatment_id} {date_to_yyddd(event_date)} IR001 {row.irrigation_mm:5.1f}")
     return lines
 
 
-def build_fertilizer_lines(policy: list[PolicyRow], planting_yyddd: str) -> list[str]:
+def build_fertilizer_lines(policy: list[PolicyRow], planting_yyddd: str, treatment_ids: list[int]) -> list[str]:
     planting_date = yyddd_to_date(planting_yyddd)
     lines = ["@F FDATE  FMCD  FACD  FDEP  FAMN  FAMP  FAMK  FAMC  FAMO  FOCD FERNAME"]
-    for row in policy:
-        if row.nitrogen_kg_ha <= 0.0:
-            continue
-        event_date = planting_date + timedelta(days=row.day_index)
-        lines.append(
-            f" 1 {date_to_yyddd(event_date)} FE001 AP001    10 {row.nitrogen_kg_ha:5.1f}"
-            "     0     0     0     0   -99 TRNSDAT"
-        )
+    for treatment_id in treatment_ids:
+        for row in policy:
+            if row.nitrogen_kg_ha <= 0.0:
+                continue
+            event_date = planting_date + timedelta(days=row.day_index)
+            lines.append(
+                f" {treatment_id} {date_to_yyddd(event_date)} FE001 AP001    10 {row.nitrogen_kg_ha:5.1f}"
+                "     0     0     0     0   -99 TRNSDAT"
+            )
     return lines
 
 
@@ -292,11 +299,11 @@ def main() -> int:
     policy = parse_policy(policy_path)
     weather_rows = parse_weather(weather_path)
     lines = experiment_path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    lines = replace_treatments_block(lines)
+    treatment_ids = extract_treatment_ids(lines)
     planting_yyddd = extract_template_planting_date(lines)
     station_code, latitude, longitude, elevation = extract_field_metadata(lines)
-    irrigation_lines = build_irrigation_lines(policy, planting_yyddd)
-    fertilizer_lines = build_fertilizer_lines(policy, planting_yyddd)
+    irrigation_lines = build_irrigation_lines(policy, planting_yyddd, treatment_ids)
+    fertilizer_lines = build_fertilizer_lines(policy, planting_yyddd, treatment_ids)
     updated = replace_irrigation_block(lines, irrigation_lines)
     updated = replace_fertilizer_block(updated, fertilizer_lines)
     experiment_path.write_text("\n".join(updated) + "\n", encoding="utf-8")
