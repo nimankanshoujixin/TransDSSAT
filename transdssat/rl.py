@@ -29,6 +29,17 @@ STAGE_ACTION_MASKS = {
     },
 }
 
+DAILY_EVENT_CONFIG = {
+    "wheat": {
+        "irrigation": {"max_events": 2, "min_gap_days": 21, "min_event_amount": 5.0},
+        "nitrogen": {"max_events": 3, "min_gap_days": 14, "min_event_amount": 5.0},
+    },
+    "maize": {
+        "irrigation": {"max_events": 4, "min_gap_days": 10, "min_event_amount": 5.0},
+        "nitrogen": {"max_events": 4, "min_gap_days": 10, "min_event_amount": 5.0},
+    },
+}
+
 
 def evaluate_policy_for_scenario(scenario: SimulationScenario, policy: SeasonPolicy) -> Trajectory:
     if scenario.engine_name == "dssat_official":
@@ -225,16 +236,24 @@ def _sparsify_daily_allocations(
     shares: list[float],
     min_event_amount: float,
     max_events: int,
+    min_gap_days: int,
 ) -> list[float]:
     if total <= 0.0:
         return [0.0 for _ in shares]
     raw_amounts = [max(0.0, total * share) for share in shares]
-    keep = [index for index, amount in enumerate(raw_amounts) if amount >= min_event_amount]
+    candidate_indices = [index for index, amount in enumerate(raw_amounts) if amount >= min_event_amount]
+    if not candidate_indices:
+        candidate_indices = [max(range(len(raw_amounts)), key=lambda idx: raw_amounts[idx])]
+    ranked = sorted(candidate_indices, key=lambda idx: raw_amounts[idx], reverse=True)
+    keep: list[int] = []
+    for index in ranked:
+        if all(abs(index - kept) >= min_gap_days for kept in keep):
+            keep.append(index)
+        if len(keep) >= max_events:
+            break
     if not keep:
-        keep = [max(range(len(raw_amounts)), key=lambda idx: raw_amounts[idx])]
-    if len(keep) > max_events:
-        keep = sorted(keep, key=lambda idx: raw_amounts[idx], reverse=True)[:max_events]
-        keep.sort()
+        keep = [ranked[0]]
+    keep.sort()
     kept_total = sum(raw_amounts[index] for index in keep)
     scale = total / max(1e-6, kept_total)
     allocations = [0.0 for _ in shares]
@@ -253,12 +272,9 @@ def build_daily_policy_from_allocations(
     scenario: SimulationScenario,
     irrigation_shares: Iterable[float],
     nitrogen_shares: Iterable[float],
-    irrigation_min_event_mm: float = 1.0,
-    nitrogen_min_event_kg_ha: float = 1.0,
-    irrigation_max_events: int = 6,
-    nitrogen_max_events: int = 6,
 ) -> SeasonPolicy:
     crop_masks = STAGE_ACTION_MASKS[scenario.crop_spec.crop_name]
+    event_config = DAILY_EVENT_CONFIG[scenario.crop_spec.crop_name]
     masked_irrigation_shares: list[float] = []
     masked_nitrogen_shares: list[float] = []
     for day_index, (ir_share, n_share) in enumerate(zip(irrigation_shares, nitrogen_shares)):
@@ -270,14 +286,16 @@ def build_daily_policy_from_allocations(
     irrigation_allocations = _sparsify_daily_allocations(
         scenario.irrigation_budget_mm,
         masked_irrigation_shares,
-        min_event_amount=irrigation_min_event_mm,
-        max_events=irrigation_max_events,
+        min_event_amount=event_config["irrigation"]["min_event_amount"],
+        max_events=event_config["irrigation"]["max_events"],
+        min_gap_days=event_config["irrigation"]["min_gap_days"],
     )
     nitrogen_allocations = _sparsify_daily_allocations(
         scenario.nitrogen_budget_kg_ha,
         masked_nitrogen_shares,
-        min_event_amount=nitrogen_min_event_kg_ha,
-        max_events=nitrogen_max_events,
+        min_event_amount=event_config["nitrogen"]["min_event_amount"],
+        max_events=event_config["nitrogen"]["max_events"],
+        min_gap_days=event_config["nitrogen"]["min_gap_days"],
     )
     actions: list[StageDecision] = []
     for day_index, (irrigation_mm, nitrogen_kg_ha) in enumerate(zip(irrigation_allocations, nitrogen_allocations)):
