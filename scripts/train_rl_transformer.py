@@ -14,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from transdssat.dataset import split_name
 from transdssat.evaluation import score_trajectory, summarize_scorecards
 from transdssat.policy import training_readiness
-from transdssat.rl import SeasonRLTransformer, evaluate_policy_for_scenario, sample_policies
+from transdssat.rl import SeasonRLTransformer, evaluate_policy_for_scenario, model_eval_mode, sample_policies
 from transdssat.scenarios import build_quzhou_scenarios
 from transdssat.season import (
     BASELINE_BUDGET_SOURCES,
@@ -46,19 +46,20 @@ def evaluate_greedy_policy(
 ):
     scorecards = []
     rewards = []
-    for scenario in scenarios:
-        sampled_policy = sample_policies(
-            model,
-            [scenario],
-            greedy=True,
-            decision_granularity=decision_granularity,
-            control_mode=control_mode,
-            reference_policies=[baseline_policy_cache[scenario.scenario_id]],
-        )[0].policy
-        candidate = evaluate_policy_for_scenario(scenario, sampled_policy)
-        baseline = baseline_cache[scenario.scenario_id]
-        scorecards.append(score_trajectory(scenario, candidate, baseline))
-        rewards.append(candidate.outcome.cumulative_reward)
+    with model_eval_mode(model):
+        for scenario in scenarios:
+            sampled_policy = sample_policies(
+                model,
+                [scenario],
+                greedy=True,
+                decision_granularity=decision_granularity,
+                control_mode=control_mode,
+                reference_policies=[baseline_policy_cache[scenario.scenario_id]],
+            )[0].policy
+            candidate = evaluate_policy_for_scenario(scenario, sampled_policy)
+            baseline = baseline_cache[scenario.scenario_id]
+            scorecards.append(score_trajectory(scenario, candidate, baseline))
+            rewards.append(candidate.outcome.cumulative_reward)
     summary = summarize_scorecards(scorecards)
     summary["mean_reward"] = round(sum(rewards) / max(1, len(rewards)), 6)
     return summary, scorecards

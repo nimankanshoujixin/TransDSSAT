@@ -374,3 +374,18 @@ def sample_policies(
         sampled.append(SampledSeasonPolicy(policy=policy, log_prob=log_prob, entropy=entropy))
 
     return sampled
+
+
+def model_eval_mode(model):
+    class _EvalContext:
+        def __enter__(self_nonlocal):
+            self_nonlocal.was_training = model.training
+            model.eval()
+            return model
+
+        def __exit__(self_nonlocal, exc_type, exc, tb):
+            if self_nonlocal.was_training:
+                model.train()
+            return False
+
+    return _EvalContext()
