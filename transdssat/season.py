@@ -59,9 +59,13 @@ LITERATURE_STAGE_SPLITS = {
 
 LITERATURE_EVENT_PLAN = {
     "wheat": (
-        ("emergence", 0.00, 0.00, 0.40),
-        ("vegetative", 0.42, 0.50, 0.30),
-        ("reproductive", 0.72, 0.50, 0.30),
+        ("emergence", 0.00, 0.00, 0.20),
+        ("emergence", 0.08, 0.00, 0.15),
+        ("vegetative", 0.18, 0.00, 0.15),
+        ("vegetative", 0.28, 0.34, 0.15),
+        ("vegetative", 0.56, 0.33, 0.15),
+        ("reproductive", 0.70, 0.33, 0.10),
+        ("reproductive", 0.80, 0.00, 0.10),
     ),
     "maize": (
         ("emergence", 0.00, 0.00, 0.40),

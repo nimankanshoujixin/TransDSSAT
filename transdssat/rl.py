@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import math
 from typing import Iterable
 
 from transdssat.domain import Trajectory
@@ -32,7 +33,7 @@ STAGE_ACTION_MASKS = {
 DAILY_EVENT_CONFIG = {
     "wheat": {
         "irrigation": {"max_events": 3, "min_gap_days": 18, "min_event_amount": 5.0, "max_event_amount": 80.0},
-        "nitrogen": {"max_events": 3, "min_gap_days": 14, "min_event_amount": 5.0, "max_event_amount": 45.0},
+        "nitrogen": {"max_events": 6, "min_gap_days": 14, "min_event_amount": 5.0, "max_event_amount": 45.0},
     },
     "maize": {
         "irrigation": {"max_events": 4, "min_gap_days": 10, "min_event_amount": 5.0, "max_event_amount": 75.0},
@@ -265,7 +266,7 @@ def _sparsify_daily_allocations(
             break
     if not keep:
         keep = [ranked[0]]
-    required_events = min(max_events, max(1, int((total + max_event_amount - 1e-9) // max_event_amount)))
+    required_events = max(1, math.ceil(total / max_event_amount))
     if len(keep) < required_events:
         for index in ranked:
             if index in keep:
@@ -274,34 +275,38 @@ def _sparsify_daily_allocations(
                 keep.append(index)
             if len(keep) >= required_events:
                 break
+    if len(keep) < required_events:
+        for index in ranked:
+            if index in keep:
+                continue
+            keep.append(index)
+            if len(keep) >= required_events:
+                break
     keep.sort()
     allocations = [0.0 for _ in shares]
     remaining = keep[:]
     remaining_total = total
     while remaining:
         weight_sum = sum(max(raw_amounts[index], 1e-6) for index in remaining)
-        capped_index = None
-        for index in remaining:
-            tentative = remaining_total * max(raw_amounts[index], 1e-6) / max(1e-6, weight_sum)
-            if tentative > max_event_amount + 1e-9:
-                capped_index = index
-                allocations[index] = round(max_event_amount, 3)
-                remaining_total -= max_event_amount
-                break
-        if capped_index is None:
+        uncapped_values = {
+            index: remaining_total * max(raw_amounts[index], 1e-6) / max(1e-6, weight_sum)
+            for index in remaining
+        }
+        overflowing = [index for index, value in uncapped_values.items() if value > max_event_amount + 1e-9]
+        if not overflowing:
             running = 0.0
             for keep_index, day_index in enumerate(remaining):
                 if keep_index == len(remaining) - 1:
                     value = round(remaining_total - running, 3)
                 else:
-                    value = round(
-                        remaining_total * max(raw_amounts[day_index], 1e-6) / max(1e-6, weight_sum),
-                        3,
-                    )
+                    value = round(uncapped_values[day_index], 3)
                     running += value
                 allocations[day_index] = max(0.0, value)
             break
-        remaining.remove(capped_index)
+        for index in overflowing:
+            allocations[index] = round(max_event_amount, 3)
+            remaining_total -= max_event_amount
+        remaining = [index for index in remaining if index not in overflowing]
     return allocations
 
 
