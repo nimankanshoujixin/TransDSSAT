@@ -40,6 +40,17 @@ DAILY_EVENT_CONFIG = {
     },
 }
 
+DAILY_ACTION_WINDOWS = {
+    "wheat": {
+        "irrigation": ((0.36, 0.54), (0.60, 0.80)),
+        "nitrogen": ((0.00, 0.10), (0.14, 0.30), (0.52, 0.70)),
+    },
+    "maize": {
+        "irrigation": ((0.00, 0.18), (0.24, 0.48), (0.56, 0.78)),
+        "nitrogen": ((0.00, 0.12), (0.18, 0.42), (0.52, 0.76)),
+    },
+}
+
 
 def evaluate_policy_for_scenario(scenario: SimulationScenario, policy: SeasonPolicy) -> Trajectory:
     if scenario.engine_name == "dssat_official":
@@ -275,13 +286,23 @@ def build_daily_policy_from_allocations(
 ) -> SeasonPolicy:
     crop_masks = STAGE_ACTION_MASKS[scenario.crop_spec.crop_name]
     event_config = DAILY_EVENT_CONFIG[scenario.crop_spec.crop_name]
+    action_windows = DAILY_ACTION_WINDOWS[scenario.crop_spec.crop_name]
     masked_irrigation_shares: list[float] = []
     masked_nitrogen_shares: list[float] = []
     for day_index, (ir_share, n_share) in enumerate(zip(irrigation_shares, nitrogen_shares)):
         stage_name, _ = stage_for_day(day_index, scenario.crop_spec.season_length_days)
         stage_pos = STAGES.index(stage_name)
-        masked_irrigation_shares.append(ir_share * crop_masks["irrigation"][stage_pos])
-        masked_nitrogen_shares.append(n_share * crop_masks["nitrogen"][stage_pos])
+        progress = day_index / max(1.0, scenario.crop_spec.season_length_days - 1)
+        irrigation_window_mask = 1.0 if any(
+            window_start <= progress <= window_end
+            for window_start, window_end in action_windows["irrigation"]
+        ) else 0.0
+        nitrogen_window_mask = 1.0 if any(
+            window_start <= progress <= window_end
+            for window_start, window_end in action_windows["nitrogen"]
+        ) else 0.0
+        masked_irrigation_shares.append(ir_share * crop_masks["irrigation"][stage_pos] * irrigation_window_mask)
+        masked_nitrogen_shares.append(n_share * crop_masks["nitrogen"][stage_pos] * nitrogen_window_mask)
 
     irrigation_allocations = _sparsify_daily_allocations(
         scenario.irrigation_budget_mm,
