@@ -148,6 +148,22 @@ def extract_field_metadata(lines: list[str]) -> tuple[str, float, float, float]:
     raise RuntimeError("Could not locate field metadata in DSSAT experiment file.")
 
 
+def replace_treatments_block(lines: list[str]) -> list[str]:
+    start = next(index for index, line in enumerate(lines) if line.startswith("*TREATMENTS"))
+    end = next(
+        index
+        for index in range(start + 1, len(lines))
+        if lines[index].startswith("*CULTIVARS")
+    )
+    original = lines[start:end]
+    header_index = next(index for index, line in enumerate(original) if line.startswith("@N "))
+    first_treatment_line = next(
+        line for line in original[header_index + 1 :] if line.strip().startswith("1 ")
+    )
+    new_block = original[: header_index + 1] + [first_treatment_line]
+    return lines[:start] + new_block + lines[end:]
+
+
 def build_irrigation_lines(policy: list[PolicyRow], planting_yyddd: str) -> list[str]:
     planting_date = yyddd_to_date(planting_yyddd)
     lines = [
@@ -276,6 +292,7 @@ def main() -> int:
     policy = parse_policy(policy_path)
     weather_rows = parse_weather(weather_path)
     lines = experiment_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    lines = replace_treatments_block(lines)
     planting_yyddd = extract_template_planting_date(lines)
     station_code, latitude, longitude, elevation = extract_field_metadata(lines)
     irrigation_lines = build_irrigation_lines(policy, planting_yyddd)
