@@ -31,18 +31,18 @@ STAGE_ACTION_MASKS = {
 
 DAILY_EVENT_CONFIG = {
     "wheat": {
-        "irrigation": {"max_events": 2, "min_gap_days": 21, "min_event_amount": 5.0},
-        "nitrogen": {"max_events": 3, "min_gap_days": 14, "min_event_amount": 5.0},
+        "irrigation": {"max_events": 3, "min_gap_days": 18, "min_event_amount": 5.0, "max_event_amount": 80.0},
+        "nitrogen": {"max_events": 3, "min_gap_days": 14, "min_event_amount": 5.0, "max_event_amount": 45.0},
     },
     "maize": {
-        "irrigation": {"max_events": 4, "min_gap_days": 10, "min_event_amount": 5.0},
-        "nitrogen": {"max_events": 4, "min_gap_days": 10, "min_event_amount": 5.0},
+        "irrigation": {"max_events": 4, "min_gap_days": 10, "min_event_amount": 5.0, "max_event_amount": 75.0},
+        "nitrogen": {"max_events": 4, "min_gap_days": 10, "min_event_amount": 5.0, "max_event_amount": 50.0},
     },
 }
 
 DAILY_ACTION_WINDOWS = {
     "wheat": {
-        "irrigation": ((0.36, 0.54), (0.60, 0.80)),
+        "irrigation": ((0.30, 0.44), (0.48, 0.62), (0.66, 0.82)),
         "nitrogen": ((0.00, 0.10), (0.14, 0.30), (0.52, 0.70)),
     },
     "maize": {
@@ -248,6 +248,7 @@ def _sparsify_daily_allocations(
     min_event_amount: float,
     max_events: int,
     min_gap_days: int,
+    max_event_amount: float,
 ) -> list[float]:
     if total <= 0.0:
         return [0.0 for _ in shares]
@@ -255,7 +256,7 @@ def _sparsify_daily_allocations(
     candidate_indices = [index for index, amount in enumerate(raw_amounts) if amount >= min_event_amount]
     if not candidate_indices:
         candidate_indices = [max(range(len(raw_amounts)), key=lambda idx: raw_amounts[idx])]
-    ranked = sorted(candidate_indices, key=lambda idx: raw_amounts[idx], reverse=True)
+    ranked = sorted(range(len(raw_amounts)), key=lambda idx: raw_amounts[idx], reverse=True)
     keep: list[int] = []
     for index in ranked:
         if all(abs(index - kept) >= min_gap_days for kept in keep):
@@ -264,18 +265,43 @@ def _sparsify_daily_allocations(
             break
     if not keep:
         keep = [ranked[0]]
+    required_events = min(max_events, max(1, int((total + max_event_amount - 1e-9) // max_event_amount)))
+    if len(keep) < required_events:
+        for index in ranked:
+            if index in keep:
+                continue
+            if all(abs(index - kept) >= min_gap_days for kept in keep):
+                keep.append(index)
+            if len(keep) >= required_events:
+                break
     keep.sort()
-    kept_total = sum(raw_amounts[index] for index in keep)
-    scale = total / max(1e-6, kept_total)
     allocations = [0.0 for _ in shares]
-    running = 0.0
-    for keep_index, day_index in enumerate(keep):
-        if keep_index == len(keep) - 1:
-            value = round(total - running, 3)
-        else:
-            value = round(raw_amounts[day_index] * scale, 3)
-            running += value
-        allocations[day_index] = max(0.0, value)
+    remaining = keep[:]
+    remaining_total = total
+    while remaining:
+        weight_sum = sum(max(raw_amounts[index], 1e-6) for index in remaining)
+        capped_index = None
+        for index in remaining:
+            tentative = remaining_total * max(raw_amounts[index], 1e-6) / max(1e-6, weight_sum)
+            if tentative > max_event_amount + 1e-9:
+                capped_index = index
+                allocations[index] = round(max_event_amount, 3)
+                remaining_total -= max_event_amount
+                break
+        if capped_index is None:
+            running = 0.0
+            for keep_index, day_index in enumerate(remaining):
+                if keep_index == len(remaining) - 1:
+                    value = round(remaining_total - running, 3)
+                else:
+                    value = round(
+                        remaining_total * max(raw_amounts[day_index], 1e-6) / max(1e-6, weight_sum),
+                        3,
+                    )
+                    running += value
+                allocations[day_index] = max(0.0, value)
+            break
+        remaining.remove(capped_index)
     return allocations
 
 
@@ -310,6 +336,7 @@ def build_daily_policy_from_allocations(
         min_event_amount=event_config["irrigation"]["min_event_amount"],
         max_events=event_config["irrigation"]["max_events"],
         min_gap_days=event_config["irrigation"]["min_gap_days"],
+        max_event_amount=event_config["irrigation"]["max_event_amount"],
     )
     nitrogen_allocations = _sparsify_daily_allocations(
         scenario.nitrogen_budget_kg_ha,
@@ -317,6 +344,7 @@ def build_daily_policy_from_allocations(
         min_event_amount=event_config["nitrogen"]["min_event_amount"],
         max_events=event_config["nitrogen"]["max_events"],
         min_gap_days=event_config["nitrogen"]["min_gap_days"],
+        max_event_amount=event_config["nitrogen"]["max_event_amount"],
     )
     actions: list[StageDecision] = []
     for day_index, (irrigation_mm, nitrogen_kg_ha) in enumerate(zip(irrigation_allocations, nitrogen_allocations)):
