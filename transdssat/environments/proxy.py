@@ -4,8 +4,15 @@ from dataclasses import dataclass
 
 from transdssat.domain import CropAction, CropOutcome, CropState
 from transdssat.environments.base import CropEnvironment
-from transdssat.rewarding import RewardWeights, input_use_efficiency, reward_from_outcome
-from transdssat.scenarios import SimulationScenario, stage_for_day
+from transdssat.rewarding import (
+    anti_collapse_preferences,
+    input_use_efficiency,
+    objective_reward_weights,
+    reward_from_outcome,
+    resource_settlement_preferences,
+    step_reward,
+)
+from transdssat.scenarios import SimulationScenario, scenario_yield_floor_reference, stage_for_day
 
 
 @dataclass(slots=True)
@@ -64,7 +71,7 @@ class ProxyCropEnvironment(CropEnvironment):
     def __init__(self, scenario: SimulationScenario, coefficients: ProxyCoefficients) -> None:
         self.scenario = scenario
         self.coefficients = coefficients
-        self.reward_weights = RewardWeights()
+        self.reward_weights = objective_reward_weights(scenario.objective_context.to_dict())
         self.day_index = 0
         self.root_zone_water_mm = scenario.soil_profile.initial_root_zone_water_mm
         self.soil_nitrogen_kg_ha = scenario.soil_profile.initial_nitrogen_kg_ha
@@ -77,6 +84,9 @@ class ProxyCropEnvironment(CropEnvironment):
         self.cumulative_reward = 0.0
         self.cumulative_water_stress = 0.0
         self.cumulative_nitrogen_stress = 0.0
+        self.total_drainage_mm = 0.0
+        self.total_nitrogen_leached_kg_ha = 0.0
+        self.operation_count = 0
         self.stress_observations = 0
         self._done = False
 
@@ -93,6 +103,9 @@ class ProxyCropEnvironment(CropEnvironment):
         self.cumulative_reward = 0.0
         self.cumulative_water_stress = 0.0
         self.cumulative_nitrogen_stress = 0.0
+        self.total_drainage_mm = 0.0
+        self.total_nitrogen_leached_kg_ha = 0.0
+        self.operation_count = 0
         self.stress_observations = 0
         self._done = False
         return self._current_state()
@@ -166,15 +179,21 @@ class ProxyCropEnvironment(CropEnvironment):
         self.total_nitrogen_kg_ha += action.nitrogen_kg_ha
         self.cumulative_water_stress += water_stress
         self.cumulative_nitrogen_stress += nitrogen_stress
+        self.total_drainage_mm += drainage
+        self.total_nitrogen_leached_kg_ha += leaching
         self.stress_observations += 1
 
         weights = self.reward_weights
-        reward = (
-            biomass_gain * weights.biomass_gain_weight
-            - action.irrigation_mm * weights.irrigation_cost
-            - action.nitrogen_kg_ha * weights.nitrogen_cost
-            - water_stress * weights.water_stress_cost
-            - nitrogen_stress * weights.nitrogen_stress_cost
+        operation_count = 1 if action.irrigation_mm > 0.0 or action.nitrogen_kg_ha > 0.0 else 0
+        self.operation_count += operation_count
+        reward = step_reward(
+            biomass_gain=biomass_gain,
+            irrigation_mm=action.irrigation_mm,
+            nitrogen_kg_ha=action.nitrogen_kg_ha,
+            water_stress=water_stress,
+            nitrogen_stress=nitrogen_stress,
+            operation_count=operation_count,
+            weights=weights,
         )
 
         self.day_index += 1
@@ -191,7 +210,15 @@ class ProxyCropEnvironment(CropEnvironment):
                 nitrogen_budget_kg_ha=self.scenario.nitrogen_budget_kg_ha,
                 avg_water_stress=avg_water_stress,
                 avg_nitrogen_stress=avg_nitrogen_stress,
+                operation_count=self.operation_count,
+                environmental_metrics={
+                    "total_drainage_mm": self.total_drainage_mm,
+                    "total_nitrogen_leached_kg_ha": self.total_nitrogen_leached_kg_ha,
+                },
                 weights=weights,
+                yield_floor_reference=self._yield_floor_reference(),
+                anti_collapse_guardrail=anti_collapse_preferences(self.scenario.objective_context.to_dict()),
+                resource_settlement=resource_settlement_preferences(self.scenario.objective_context.to_dict()),
             )
         self.cumulative_reward += reward
         next_state = self._current_state()
@@ -219,6 +246,15 @@ class ProxyCropEnvironment(CropEnvironment):
             water_use_efficiency=input_use_efficiency(yield_kg_ha, self.total_irrigation_mm),
             nitrogen_use_efficiency=input_use_efficiency(yield_kg_ha, self.total_nitrogen_kg_ha),
             cumulative_reward=round(self.cumulative_reward, 5),
+            environmental_metrics={
+                "avg_water_stress": round(self.cumulative_water_stress / max(1, self.stress_observations), 6),
+                "avg_nitrogen_stress": round(self.cumulative_nitrogen_stress / max(1, self.stress_observations), 6),
+                "total_drainage_mm": round(self.total_drainage_mm, 6),
+                "total_nitrogen_leached_kg_ha": round(self.total_nitrogen_leached_kg_ha, 6),
+                "terminal_root_zone_water_mm": round(self.root_zone_water_mm, 6),
+                "terminal_soil_nitrogen_kg_ha": round(self.soil_nitrogen_kg_ha, 6),
+                "operation_count": float(self.operation_count),
+            },
         )
 
     def _current_state(self) -> CropState:
@@ -251,6 +287,9 @@ class ProxyCropEnvironment(CropEnvironment):
             et0_mm=weather.et0_mm,
             radiation_mj_m2=weather.radiation_mj_m2,
         )
+
+    def _yield_floor_reference(self) -> float:
+        return scenario_yield_floor_reference(self.scenario)
 
 
 def make_environment(scenario: SimulationScenario) -> CropEnvironment:

@@ -74,9 +74,9 @@ def encode_scenario_day(scenario: SimulationScenario, day_index: int) -> list[fl
         soil.field_capacity_mm / 400.0,
         soil.wilting_point_mm / 200.0,
         soil.initial_root_zone_water_mm / 400.0,
-        soil.initial_nitrogen_kg_ha / 300.0,
-        scenario.irrigation_budget_mm / 300.0,
-        scenario.nitrogen_budget_kg_ha / 300.0,
+        soil.initial_nitrogen_kg_ha / 500.0,
+        scenario.irrigation_budget_mm / 500.0,
+        scenario.nitrogen_budget_kg_ha / 500.0,
         crop_indicator,
     ]
 
@@ -157,6 +157,7 @@ class SampledSeasonPolicy:
 
 def collate_scenarios_for_rl(
     scenarios: list[SimulationScenario],
+    device: "torch.device | str | None" = None,
 ) -> tuple["torch.Tensor", "torch.Tensor", "torch.Tensor"]:
     if not TORCH_AVAILABLE:
         raise RuntimeError("PyTorch is required for RL policy batching.")
@@ -164,16 +165,16 @@ def collate_scenarios_for_rl(
 
     max_len = max(scenario.crop_spec.season_length_days for scenario in scenarios)
     feature_dim = len(encode_scenario_sequence(scenarios[0])[0])
-    features = torch.zeros((len(scenarios), max_len, feature_dim), dtype=torch.float32)
-    padding_mask = torch.ones((len(scenarios), max_len), dtype=torch.bool)
-    stage_indices = torch.zeros((len(scenarios), len(STAGES)), dtype=torch.long)
+    features = torch.zeros((len(scenarios), max_len, feature_dim), dtype=torch.float32, device=device)
+    padding_mask = torch.ones((len(scenarios), max_len), dtype=torch.bool, device=device)
+    stage_indices = torch.zeros((len(scenarios), len(STAGES)), dtype=torch.long, device=device)
 
     for row_index, scenario in enumerate(scenarios):
-        sequence = torch.tensor(encode_scenario_sequence(scenario), dtype=torch.float32)
+        sequence = torch.tensor(encode_scenario_sequence(scenario), dtype=torch.float32, device=device)
         length = sequence.size(0)
         features[row_index, :length, :] = sequence
         padding_mask[row_index, :length] = False
-        stage_indices[row_index, :] = torch.tensor(stage_indices_for_scenario(scenario), dtype=torch.long)
+        stage_indices[row_index, :] = torch.tensor(stage_indices_for_scenario(scenario), dtype=torch.long, device=device)
 
     return features, padding_mask, stage_indices
 
@@ -397,7 +398,8 @@ def sample_policies(
         raise RuntimeError("Reference policies are required for water_only or nitrogen_only control modes.")
     import torch
 
-    features, padding_mask, stage_indices = collate_scenarios_for_rl(scenarios)
+    model_device = next(model.parameters()).device
+    features, padding_mask, stage_indices = collate_scenarios_for_rl(scenarios, device=model_device)
     model_stage_indices = stage_indices if decision_granularity == "stage" else None
     irrigation_concentration, nitrogen_concentration = model(
         features,

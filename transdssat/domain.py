@@ -43,6 +43,7 @@ class CropOutcome:
     water_use_efficiency: float
     nitrogen_use_efficiency: float
     cumulative_reward: float
+    environmental_metrics: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -36,6 +36,14 @@ def batch_scenarios(items, batch_size: int):
         yield batch
 
 
+def resolve_device(requested: str):
+    import torch
+
+    if requested == "auto":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return torch.device(requested)
+
+
 def evaluate_greedy_policy(
     model,
     scenarios,
@@ -75,6 +83,7 @@ def main() -> int:
     parser.add_argument("--batch-size", type=int, default=4, help="Scenario batch size per policy update.")
     parser.add_argument("--lr", type=float, default=5e-4, help="Adam learning rate.")
     parser.add_argument("--entropy-coef", type=float, default=0.01, help="Entropy bonus coefficient.")
+    parser.add_argument("--device", default="auto", help="Device selection: auto, cpu, cuda, cuda:0, ...")
     parser.add_argument("--seed", type=int, default=20260426, help="Random seed.")
     parser.add_argument(
         "--baseline-name",
@@ -118,6 +127,7 @@ def main() -> int:
 
     random.seed(args.seed)
     torch.manual_seed(args.seed)
+    device = resolve_device(args.device)
 
     scenarios = build_quzhou_scenarios(
         target_count=args.scenario_count,
@@ -141,7 +151,7 @@ def main() -> int:
         baseline_policy_cache[scenario.scenario_id] = baseline_policy
         baseline_cache[scenario.scenario_id] = evaluate_policy_for_scenario(scenario, baseline_policy)
 
-    model = SeasonRLTransformer()
+    model = SeasonRLTransformer().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     output_dir = Path(args.output_dir)
@@ -183,8 +193,8 @@ def main() -> int:
                 epoch_rewards.append(reward)
                 epoch_gains.append(reward - baseline_reward)
 
-            rewards_tensor = torch.tensor(rewards, dtype=torch.float32)
-            baselines_tensor = torch.tensor(baselines, dtype=torch.float32)
+            rewards_tensor = torch.tensor(rewards, dtype=torch.float32, device=device)
+            baselines_tensor = torch.tensor(baselines, dtype=torch.float32, device=device)
             advantages = rewards_tensor - baselines_tensor
             if advantages.numel() > 1:
                 advantages = (advantages - advantages.mean()) / (advantages.std(unbiased=False) + 1e-6)
@@ -230,6 +240,7 @@ def main() -> int:
                 "baseline_budget_source": args.baseline_budget_source,
                 "decision_granularity": args.decision_granularity,
                 "control_mode": args.control_mode,
+                "device": str(device),
             }
 
         print(
@@ -237,10 +248,11 @@ def main() -> int:
                 {
                     "epoch": epoch,
                     "train": train_summary,
-                    "test": test_summary,
-                },
-                ensure_ascii=False,
-            )
+                "test": test_summary,
+                "device": str(device),
+            },
+            ensure_ascii=False,
+        )
         )
 
     assert best_checkpoint is not None
@@ -259,6 +271,7 @@ def main() -> int:
                 "best_epoch": best_checkpoint["epoch"],
                 "best_selection_value": best_score,
                 "selection_metric": args.selection_metric,
+                "device": str(device),
             },
             ensure_ascii=False,
         )

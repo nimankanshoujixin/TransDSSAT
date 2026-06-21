@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TransDSSAT 任务差距与下一步方案汇报</title>
+  <style>
+    :root {
+      --bg: #f5f1e8;
+      --paper: #fffdf8;
+      --ink: #1f2937;
+      --muted: #667085;
+      --line: #ddd4c6;
+      --blue: #eaf3fb;
+      --orange: #fbefe4;
+      --green: #edf7ef;
+      --red: #f8e8e6;
+      --accent: #185f91;
+      --accent2: #b8642a;
+      --shadow: 0 18px 48px rgba(58, 50, 35, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+      background: radial-gradient(circle at top right, #f7ead7 0, #f5f1e8 35%, #efe8dd 100%);
+      color: var(--ink);
+      overflow: hidden;
+    }
+    .deck { width: 100vw; height: 100vh; position: relative; }
+    .slide {
+      display: none;
+      width: 100%;
+      height: 100%;
+      padding: 36px 52px 30px;
+      background: linear-gradient(180deg, rgba(255,253,248,.97), rgba(255,250,243,.97));
+    }
+    .slide.active { display: flex; flex-direction: column; }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 20px;
+    }
+    .title { font-size: 31px; font-weight: 800; line-height: 1.2; }
+    .subtitle { font-size: 14px; color: var(--muted); margin-top: 8px; }
+    .page { font-size: 14px; color: var(--muted); min-width: 76px; text-align: right; }
+    .content { flex: 1; display: grid; gap: 18px; min-height: 0; }
+    .grid-2 { grid-template-columns: 1.15fr 1fr; }
+    .grid-2-eq { grid-template-columns: 1fr 1fr; }
+    .grid-3 { grid-template-columns: repeat(3, 1fr); }
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 18px 20px;
+      min-height: 0;
+    }
+    .card h3 { margin: 0 0 12px; font-size: 18px; }
+    .card h4 { margin: 0 0 8px; font-size: 15px; color: var(--accent); }
+    .lead { font-size: 21px; line-height: 1.55; font-weight: 700; }
+    .big { font-size: 44px; font-weight: 900; line-height: 1; color: var(--accent); margin-bottom: 8px; }
+    .pill-row { display: flex; flex-wrap: wrap; gap: 10px; }
+    .pill {
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: var(--blue);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      border: 1px solid #cddded;
+    }
+    .soft {
+      border-radius: 16px;
+      padding: 14px 15px;
+      border: 1px solid #e5dccd;
+      background: #fcf8f1;
+    }
+    .soft.blue { background: var(--blue); border-color: #d5e4f2; }
+    .soft.orange { background: var(--orange); border-color: #ebd3bf; }
+    .soft.green { background: var(--green); border-color: #d4e8d7; }
+    .soft.red { background: var(--red); border-color: #ecd0cb; }
+    .metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .metric {
+      background: #fbf8f1;
+      border: 1px solid #e8dece;
+      border-radius: 16px;
+      padding: 13px 14px;
+    }
+    .metric .k { font-size: 12px; color: var(--muted); margin-bottom: 7px; }
+    .metric .v { font-size: 21px; font-weight: 800; line-height: 1.2; }
+    ul.clean { margin: 0; padding-left: 20px; line-height: 1.65; font-size: 15px; }
+    .note { font-size: 13px; color: var(--muted); line-height: 1.6; }
+    .matrix { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .matrix th, .matrix td {
+      border: 1px solid #e5dbc9;
+      padding: 10px 8px;
+      text-align: center;
+      vertical-align: middle;
+    }
+    .matrix th { background: #f8f1e5; font-weight: 800; }
+    .matrix td.left { text-align: left; font-weight: 700; background: #fdf9f0; }
+    .compare { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .compare .col {
+      border: 1px solid #e8dece;
+      background: #fffdf8;
+      border-radius: 18px;
+      padding: 14px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: #eff5ff;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr 54px 1fr 54px 1fr;
+      align-items: center;
+      gap: 8px;
+    }
+    .flow .box {
+      min-height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid #d8e5f0;
+      background: var(--blue);
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.5;
+    }
+    .flow .box.orange { border-color: #e6d0bd; background: var(--orange); color: #7b4a20; }
+    .flow .box.green { border-color: #d0e3d4; background: var(--green); color: #2b6f36; }
+    .arrow { text-align: center; font-size: 30px; color: var(--muted); font-weight: 900; }
+    .bar-wrap { display: grid; gap: 12px; }
+    .bar-row {
+      display: grid;
+      grid-template-columns: 170px 1fr 80px;
+      gap: 10px;
+      align-items: center;
+      font-size: 14px;
+    }
+    .bar-label { font-weight: 700; }
+    .bar-track {
+      height: 16px;
+      border-radius: 999px;
+      background: #eee7da;
+      border: 1px solid #e2d7c4;
+      overflow: hidden;
+    }
+    .bar-fill { height: 100%; background: linear-gradient(90deg, #266ab5, #8eb8eb); }
+    .bar-fill.orange { background: linear-gradient(90deg, #b76227, #e8a56f); }
+    .bar-fill.green { background: linear-gradient(90deg, #2c8248, #9ed0ab); }
+    .bar-fill.red { background: linear-gradient(90deg, #b3483f, #e69c95); }
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 16px;
+    }
+    .nav-hint {
+      position: fixed;
+      right: 18px;
+      bottom: 14px;
+      font-size: 12px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.76);
+      border: 1px solid #ddd1c0;
+      border-radius: 999px;
+      padding: 7px 10px;
+      backdrop-filter: blur(8px);
+    }
+  </style>
+</head>
+<body>
+  <div class="deck">
+    <section class="slide active">
+      <div class="header">
+        <div>
+          <div class="title">合作需求对齐：<br>我们当前模型与“稻花香2号最佳农事窗口预测产品”的差距</div>
+          <div class="subtitle">汇报重点：哪些是我们该做的、切换任务后难点在哪里、我们准备怎么解决</div>
+        </div>
+        <div class="page">01 / 07</div>
+      </div>
+      <div class="content grid-2">
+        <div class="card">
+          <div class="lead">这次新合作方案，不是简单让我们“换一个数据集继续做原来的水肥优化”，而是把任务升级成：<br><b>连续农事窗口预测与决策引擎</b>。</div>
+          <div style="height:14px"></div>
+          <div class="pill-row">
+            <span class="pill">短期天气预报</span>
+            <span class="pill">每日巡田</span>
+            <span class="pill">无人机观测</span>
+            <span class="pill">窗口级建议</span>
+            <span class="pill">连续更新</span>
+          </div>
+          <div style="height:18px"></div>
+          <div class="soft orange">
+            我们当前更像：<b>研究型水肥策略系统</b><br>
+            对方希望的是：<b>可落地的农事窗口预测产品引擎</b>
+          </div>
+        </div>
+        <div class="card">
+          <h3>一句话定位我们负责的部分</h3>
+          <div class="big">决策引擎</div>
+          <ul class="clean">
+            <li>我们负责：模型、决策、baseline、评测</li>
+            <li>不直接负责：产品销售、APP 运营、数字农艺师体系</li>
+            <li>和我们最接近的模块是：
+              <br><b>“管理分区与差异化处方生成模型”</b>
+            </li>
+            <li>叶龄 / 物候期预测与我们相关，但更像上游输入模块，而不是我们单独要完整产品化的一整块。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer">
+        <div>核心信息：任务边界变了，我们需要先明确“我们负责哪一层”。</div>
+        <div>Task alignment</div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="header">
+        <div class="title">当前模型与对方需求的主要差异</div>
+        <div class="page">02 / 07</div>
+      </div>
+      <div class="content">
+        <div class="card">
+          <table class="matrix">
+            <tr>
+              <th style="width:180px">维度</th>
+              <th>我们当前系统</th>
+              <th>对方希望的系统</th>
+            </tr>
+            <tr>
+              <td class="left">输入</td>
+              <td>天气、土壤、作物、播期、水氮预算</td>
+              <td>天气预报 + 巡田观测 + 无人机 + 操作记录 + 分区标签</td>
+            </tr>
+            <tr>
+              <td class="left">输出</td>
+              <td>灌溉日期/量、施肥日期/量</td>
+              <td>晒田、穗肥、化调、防病、收获等窗口建议</td>
+            </tr>
+            <tr>
+              <td class="left">时序方式</td>
+              <td>整季离线规划为主</td>
+              <td>每天更新判断、滚动给建议</td>
+            </tr>
+            <tr>
+              <td class="left">研究对象</td>
+              <td>冬小麦—夏玉米水肥优化</td>
+              <td>舒兰稻花香2号农事窗口预测</td>
+            </tr>
+            <tr>
+              <td class="left">标签 / 目标</td>
+              <td>产量、成本、预算匹配</td>
+              <td>产量 + 风险 + 时机 + 可执行性</td>
+            </tr>
+          </table>
+        </div>
+        <div class="grid-2-eq" style="display:grid; gap:18px;">
+          <div class="card">
+            <h3>结论 1</h3>
+            <div class="soft blue">当前系统不能直接平移过去，需要重新定义状态、动作和评测目标。</div>
+          </div>
+          <div class="card">
+            <h3>结论 2</h3>
+            <div class="soft orange">这次变化不是“小改模型”，而是任务定义从“水肥优化”升级成“农事窗口预测与决策”。</div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <div>核心信息：差异不是一个点，而是输入、输出、时序、作物对象、目标函数都变了。</div>
+        <div>Gap overview</div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="header">
+        <div class="title">第一类难点：状态、动作、reward 都要重构</div>
+        <div class="page">03 / 07</div>
+      </div>
+      <div class="content grid-3">
+        <div class="card">
+          <span class="badge">难点 1</span>
+          <h3>状态输入变复杂</h3>
+          <ul class="clean">
+            <li>要加入叶龄、茎蘖数、水层、病虫害、无人机指标</li>
+            <li>不再只是仿真场景输入</li>
+          </ul>
+          <div style="height:12px"></div>
+          <div class="soft green">
+            <b>初步方案</b><br>
+            先定义统一输入 schema；第一阶段只纳入最小必要字段，其他作为增强模块分批接入。
+          </div>
+        </div>
+        <div class="card">
+          <span class="badge">难点 2</span>
+          <h3>动作不再只是水肥量</h3>
+          <ul class="clean">
+            <li>后续要输出窗口建议</li>
+            <li>包括晒田、穗肥、化调、防病、收获</li>
+          </ul>
+          <div style="height:12px"></div>
+          <div class="soft green">
+            <b>初步方案</b><br>
+            把动作拆成两层：上层是窗口触发，下层是具体操作强度；先做高价值窗口的 MVP。
+          </div>
+        </div>
+        <div class="card">
+          <span class="badge">难点 3</span>
+          <h3>reward 体系必须升级</h3>
+          <ul class="clean">
+            <li>现在主要看产量、成本、预算</li>
+            <li>后面还要看风险和窗口时机</li>
+          </ul>
+          <div style="height:12px"></div>
+          <div class="soft green">
+            <b>初步方案</b><br>
+            把 reward 拆成多目标组件：产量、成本、风险、时机匹配、收获风险，先做可配置权重框架。
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <div>核心信息：不是调一下参数就行，而是状态、动作、reward 三件套都要升级。</div>
+        <div>Core model changes</div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="header">
+        <div class="title">第二类难点：上游依赖、作物切换、评测规则都不再简单</div>
+        <div class="page">04 / 07</div>
+      </div>
+      <div class="content grid-3">
+        <div class="card">
+          <span class="badge">难点 4</span>
+          <h3>上游模型与我们耦合</h3>
+          <ul class="clean">
+            <li>叶龄、物候期、病虫害、水层等不是我们现在主线模型直接给出的</li>
+          </ul>
+          <div style="height:12px"></div>
+          <div class="soft green">
+            <b>初步方案</b><br>
+            把这些变量先定义成外部状态接口，支持“实测输入 / 合作方模型输出 / 近似估计”三种来源。
+          </div>
+        </div>
+        <div class="card">
+          <span class="badge">难点 5</span>
+          <h3>作物系统切换</h3>
+          <ul class="clean">
+            <li>从冬小麦—夏玉米，切到舒兰稻花香2号</li>
+            <li>不是换文件，是换作物模板</li>
+          </ul>
+          <div style="height:12px"></div>
+          <div class="soft green">
+            <b>初步方案</b><br>
+            把作物知识模板化：`crop_template + variety_template + region_template`，保留旧模板，新增水稻模板。
+          </div>
+        </div>
+        <div class="card">
+          <span class="badge">难点 6</span>
+          <h3>窗口级评测更难</h3>
+          <ul class="clean">
+            <li>早 2 天或晚 1 天到底算不算错，不像产量那样天然有答案</li>
+          </ul>
+          <div style="height:12px"></div>
+          <div class="soft green">
+            <b>初步方案</b><br>
+            把评测拆成命中率、提前量、后果影响三类，先做“弱标签 + 专家规则 + 仿真结果”的混合评测。
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <div>核心信息：真正难的不只是模型本身，还有上游变量、作物模板和评测标准。</div>
+        <div>Dependency and evaluation challenges</div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="header">
+        <div class="title">第三类难点：我们要训练模型，就必须解决“数据从哪里来、结果谁来评”</div>
+        <div class="page">05 / 07</div>
+      </div>
+      <div class="content grid-2">
+        <div class="card">
+          <div class="big">新增核心难点</div>
+          <ul class="clean">
+            <li>如果最终要训练的是：
+              <br>农事窗口预测模型 / 连续决策模型 / DT + RL
+            </li>
+            <li>那就必须有大量训练样本。</li>
+            <li>但真实田间样本少、慢、贵，而且标签不完整。</li>
+            <li>更麻烦的是：即使模型生成了一个建议，我们还需要知道这套建议最终会带来什么结果。</li>
+          </ul>
+          <div style="height:14px"></div>
+          <div class="soft red">
+            当前 DSSAT 很适合评估水肥策略，但未必天然覆盖：
+            <br>晒田窗口、化调窗口、防病窗口、收获窗口的好坏。
+          </div>
+        </div>
+        <div class="card">
+          <h3>初步解决方案</h3>
+          <div class="flow">
+            <div class="box">第一层<br>proxy / surrogate 仿真<br>大量生成训练样本</div>
+            <div class="arrow">→</div>
+            <div class="box orange">第二层<br>规则 + 专家先验<br>构造窗口标签</div>
+            <div class="arrow">→</div>
+            <div class="box green">第三层<br>高保真评估器<br>小规模严谨验证</div>
+          </div>
+          <div style="height:14px"></div>
+          <ul class="clean">
+            <li>把“结果评估器”独立成系统组件，而不是隐含在模型里。</li>
+            <li>先做双层数据生成体系：
+              <br>大规模近似训练数据 + 小规模高质量验证数据
+            </li>
+            <li>窗口类任务先用规则、历史记录和风险模型构造弱标签。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer">
+        <div>核心信息：没有大规模仿真数据和稳定评估器，后续再先进的模型也训练不起来。</div>
+        <div>Data + evaluator bottleneck</div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="header">
+        <div class="title">我们建议的推进路径：不是一步到位，而是分层推进</div>
+        <div class="page">06 / 07</div>
+      </div>
+      <div class="content">
+        <div class="card">
+          <h3>建议分三层推进</h3>
+          <div class="flow">
+            <div class="box">第一层<br>窗口规则化<br>MVP</div>
+            <div class="arrow">→</div>
+            <div class="box orange">第二层<br>连续滚动决策<br>状态接入</div>
+            <div class="arrow">→</div>
+            <div class="box green">第三层<br>DT + RL<br>学习型系统</div>
+          </div>
+        </div>
+        <div class="grid-3" style="display:grid; gap:18px;">
+          <div class="card">
+            <span class="badge">阶段 1</span>
+            <h3>先把框架立住</h3>
+            <ul class="clean">
+              <li>统一输入 schema</li>
+              <li>定义窗口输出 schema</li>
+              <li>建立 baseline 与评测口径</li>
+            </ul>
+          </div>
+          <div class="card">
+            <span class="badge">阶段 2</span>
+            <h3>先做高价值窗口</h3>
+            <ul class="clean">
+              <li>晒田</li>
+              <li>穗肥</li>
+              <li>收获</li>
+            </ul>
+          </div>
+          <div class="card">
+            <span class="badge">阶段 3</span>
+            <h3>再做学习型决策</h3>
+            <ul class="clean">
+              <li>构建训练数据</li>
+              <li>做 DT</li>
+              <li>再做 RL fine-tuning</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <div>核心信息：我们有解决路径，不是只在提问题。</div>
+        <div>Phased solution</div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="header">
+        <div class="title">希望老师支持我们明确的几件事</div>
+        <div class="page">07 / 07</div>
+      </div>
+      <div class="content grid-2">
+        <div class="card">
+          <h3>需要老师支持的关键点</h3>
+          <ul class="clean">
+            <li>明确任务边界：
+              <br>我们负责决策引擎，而不是整套数字农业产品
+            </li>
+            <li>明确上游变量责任：
+              <br>叶龄、物候期、病虫害、水层、分区标签由谁提供
+            </li>
+            <li>明确目标函数优先级：
+              <br>产量、倒伏风险、病害风险、品质、收获风险哪个更重要
+            </li>
+            <li>明确数据可获得性：
+              <br>巡田数据、无人机数据、操作记录是否能标准化持续提供
+            </li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>我们当前的立场</h3>
+          <div class="soft green" style="font-size:16px; line-height:1.8;">
+            我们不是在回避问题。<br>
+            我们已经把任务切换后会遇到的关键技术难点拆清楚了，也给出了第一版解决路径。<br><br>
+            现在最需要的是：<br>
+            <b>老师帮助我们明确边界、优先级和可用数据支持，便于我们按层次推进实现。</b>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <div>核心信息：我们已经从“问题识别”走到“可执行分阶段方案”，现在需要边界和资源支持。</div>
+        <div>Support needed</div>
+      </div>
+    </section>
+  </div>
+
+  <div class="nav-hint">← / → 翻页</div>
+  <script>
+    const slides = Array.from(document.querySelectorAll('.slide'));
+    let index = 0;
+    function show(i) {
+      slides[index].classList.remove('active');
+      index = (i + slides.length) % slides.length;
+      slides[index].classList.add('active');
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') show(index + 1);
+      if (e.key === 'ArrowLeft' || e.key === 'PageUp') show(index - 1);
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('a')) show(index + 1);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TransDSSAT 阶段性成果汇报</title>
+  <style>
+    :root {
+      --bg: #f3efe6;
+      --paper: #fffaf2;
+      --ink: #1d2a24;
+      --muted: #5f6d66;
+      --accent: #1f6d52;
+      --accent-2: #d48a2f;
+      --accent-3: #7d2f2f;
+      --line: rgba(29, 42, 36, 0.12);
+      --shadow: 0 18px 48px rgba(40, 55, 47, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background:
+        radial-gradient(circle at top left, rgba(212, 138, 47, 0.15), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(31, 109, 82, 0.16), transparent 30%),
+        linear-gradient(135deg, #f6f2e8 0%, #efe7d8 48%, #f5f1e6 100%);
+      color: var(--ink);
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .deck {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: none;
+      padding: 44px 56px 40px;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,0.82), rgba(255,250,242,0.92)),
+        linear-gradient(180deg, rgba(255,255,255,0.7), rgba(255,255,255,0.45));
+    }
+
+    .slide.active { display: block; }
+
+    .frame {
+      width: 100%;
+      height: 100%;
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: rgba(255, 250, 242, 0.72);
+      box-shadow: var(--shadow);
+      padding: 34px 36px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .frame::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(120deg, rgba(31,109,82,0.04), transparent 24%),
+        linear-gradient(300deg, rgba(212,138,47,0.06), transparent 28%);
+      pointer-events: none;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      position: relative;
+      z-index: 2;
+      margin-bottom: 18px;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(31, 109, 82, 0.09);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.04em;
+    }
+
+    .page {
+      font-size: 15px;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    h1, h2, h3, p { margin: 0; }
+    h1 {
+      font-size: 44px;
+      line-height: 1.08;
+      margin: 16px 0 12px;
+      letter-spacing: -0.02em;
+    }
+    h2 {
+      font-size: 31px;
+      line-height: 1.14;
+      margin-bottom: 10px;
+    }
+    h3 {
+      font-size: 18px;
+      line-height: 1.2;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      font-size: 18px;
+      line-height: 1.55;
+      color: var(--muted);
+      max-width: 840px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 28px;
+      height: calc(100% - 100px);
+      margin-top: 24px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .hero-left {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .hero-kpis {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-top: 26px;
+    }
+
+    .card, .mini-card {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255,255,255,0.7);
+      padding: 18px 18px 16px;
+    }
+
+    .kpi-value {
+      font-size: 34px;
+      font-weight: 800;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+
+    .kpi-label {
+      font-size: 14px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .hero-visual {
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.72), rgba(247,241,229,0.92));
+      padding: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .columns-2 {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 20px;
+      height: calc(100% - 92px);
+      position: relative;
+      z-index: 2;
+    }
+
+    .columns-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      position: relative;
+      z-index: 2;
+    }
+
+    .stack {
+      display: grid;
+      gap: 16px;
+    }
+
+    .section-note {
+      font-size: 15px;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    .metric-row {
+      display: grid;
+      grid-template-columns: 1.3fr 0.8fr 0.8fr 0.8fr;
+      gap: 12px;
+      align-items: center;
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.62);
+      font-size: 15px;
+    }
+
+    .metric-row.head {
+      background: rgba(31,109,82,0.08);
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .metric-row strong {
+      font-size: 18px;
+    }
+
+    .positive { color: var(--accent); font-weight: 700; }
+    .negative { color: var(--accent-3); font-weight: 700; }
+    .neutral { color: var(--accent-2); font-weight: 700; }
+
+    .caption {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    .footnote {
+      position: absolute;
+      bottom: 18px;
+      right: 26px;
+      font-size: 12px;
+      color: rgba(95, 109, 102, 0.9);
+      z-index: 2;
+    }
+
+    .pill-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .pill {
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(31,109,82,0.18);
+      background: rgba(31,109,82,0.08);
+      font-size: 14px;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    .roadmap {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 18px;
+      margin-top: 10px;
+    }
+
+    .road-card {
+      border-radius: 22px;
+      padding: 20px 18px;
+      background: rgba(255,255,255,0.74);
+      border: 1px solid var(--line);
+    }
+
+    .road-num {
+      font-size: 44px;
+      line-height: 1;
+      color: rgba(31,109,82,0.18);
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .small {
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .progress {
+      position: absolute;
+      left: 56px;
+      right: 56px;
+      bottom: 18px;
+      display: flex;
+      gap: 8px;
+      z-index: 5;
+    }
+    .dot {
+      flex: 1;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(29,42,36,0.11);
+    }
+    .dot.active {
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    }
+
+    .nav-hint {
+      position: absolute;
+      bottom: 16px;
+      left: 56px;
+      font-size: 12px;
+      color: rgba(95,109,102,0.9);
+      z-index: 5;
+    }
+
+    ul.clean {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 15px;
+    }
+
+    .big-quote {
+      font-size: 28px;
+      line-height: 1.45;
+      font-weight: 700;
+      color: var(--ink);
+      max-width: 900px;
+    }
+  </style>
+</head>
+<body>
+  <div class="deck">
+    <section class="slide active">
+      <div class="frame">
+        <div class="header">
+          <div class="tag">TransDSSAT 阶段性成果汇报</div>
+          <div class="page">01 / 07</div>
+        </div>
+        <div class="hero">
+          <div class="hero-left">
+            <div>
+              <h1>面向作物水肥协同决策的<br>机理模型 + 智能策略框架</h1>
+              <p class="subtitle">
+                当前已实现 official DSSAT 闭环评估、文献基线对比、阶段级与日粒度策略生成，
+                并在 120 个随机场景上验证出联合控水肥的正向增益趋势。
+              </p>
+              <div class="pill-list">
+                <div class="pill">冬小麦 / 夏玉米</div>
+                <div class="pill">official DSSAT</div>
+                <div class="pill">文献基线对比</div>
+                <div class="pill">日粒度决策已跑通</div>
+              </div>
+            </div>
+
+            <div class="hero-kpis">
+              <div class="card">
+                <div class="kpi-value">120</div>
+                <div class="kpi-label">随机场景规模<br>训练 97 / 测试 23</div>
+              </div>
+              <div class="card">
+                <div class="kpi-value">+9.9%</div>
+                <div class="kpi-label">联合控水肥<br>平均产量提升</div>
+              </div>
+              <div class="card">
+                <div class="kpi-value">69.37</div>
+                <div class="kpi-label">日粒度联合控制<br>综合得分</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="hero-visual">
+            <svg width="100%" height="100%" viewBox="0 0 520 420" aria-label="summary visual">
+              <defs>
+                <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+                  <stop offset="0%" stop-color="#2e7a5f"/>
+                  <stop offset="100%" stop-color="#d48a2f"/>
+                </linearGradient>
+              </defs>
+              <rect x="26" y="36" width="468" height="348" rx="28" fill="#fffaf2" stroke="rgba(29,42,36,0.10)"/>
+              <text x="52" y="76" font-size="22" font-weight="700" fill="#1f6d52">阶段成果一图概览</text>
+
+              <rect x="56" y="112" width="120" height="86" rx="18" fill="rgba(31,109,82,0.10)"/>
+              <text x="72" y="146" font-size="18" font-weight="700" fill="#1d2a24">场景输入</text>
+              <text x="72" y="172" font-size="14" fill="#5f6d66">天气 / 土壤 / 作物 / 预算</text>
+
+              <rect x="202" y="112" width="120" height="86" rx="18" fill="rgba(212,138,47,0.12)"/>
+              <text x="220" y="146" font-size="18" font-weight="700" fill="#1d2a24">策略生成</text>
+              <text x="220" y="172" font-size="14" fill="#5f6d66">阶段级 / 日粒度</text>
+
+              <rect x="348" y="112" width="120" height="86" rx="18" fill="rgba(31,109,82,0.10)"/>
+              <text x="374" y="146" font-size="18" font-weight="700" fill="#1d2a24">DSSAT</text>
+              <text x="364" y="172" font-size="14" fill="#5f6d66">整季仿真与评估</text>
+
+              <path d="M177 155 L200 155" stroke="url(#g1)" stroke-width="6" stroke-linecap="round"/>
+              <path d="M323 155 L346 155" stroke="url(#g1)" stroke-width="6" stroke-linecap="round"/>
+
+              <text x="58" y="244" font-size="15" fill="#5f6d66">联合控水肥（daily）核心结果</text>
+              <line x1="58" y1="335" x2="470" y2="335" stroke="rgba(29,42,36,0.12)" />
+              <line x1="58" y1="270" x2="58" y2="335" stroke="rgba(29,42,36,0.12)" />
+              <rect x="98" y="302" width="60" height="33" rx="8" fill="#b94848"/>
+              <rect x="218" y="235" width="60" height="100" rx="8" fill="#d48a2f"/>
+              <rect x="338" y="228" width="60" height="107" rx="8" fill="#1f6d52"/>
+              <text x="110" y="296" font-size="14" fill="#7d2f2f">-0.6%</text>
+              <text x="225" y="229" font-size="14" fill="#8b5a18">+9.6%</text>
+              <text x="345" y="222" font-size="14" fill="#1f6d52">+9.9%</text>
+              <text x="82" y="358" font-size="13" fill="#5f6d66">仅控水</text>
+              <text x="194" y="358" font-size="13" fill="#5f6d66">仅控肥</text>
+              <text x="316" y="358" font-size="13" fill="#5f6d66">联合控制</text>
+            </svg>
+          </div>
+        </div>
+        <div class="nav-hint">← / → 切换页面</div>
+        <div class="progress">
+          <div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="frame">
+        <div class="header">
+          <div class="tag">已取得的阶段成果</div>
+          <div class="page">02 / 07</div>
+        </div>
+        <h2>我们现在已经做成了什么</h2>
+        <p class="subtitle">不是“概念验证”，而是已经形成了可运行、可评估、可扩展的农业决策研究闭环。</p>
+        <div class="columns-2" style="margin-top:18px;">
+          <div class="stack">
+            <div class="card">
+              <h3>能力闭环</h3>
+              <svg width="100%" height="220" viewBox="0 0 760 220">
+                <rect x="16" y="38" width="146" height="70" rx="18" fill="rgba(31,109,82,0.10)" stroke="rgba(29,42,36,0.10)"/>
+                <rect x="204" y="38" width="146" height="70" rx="18" fill="rgba(212,138,47,0.12)" stroke="rgba(29,42,36,0.10)"/>
+                <rect x="392" y="38" width="146" height="70" rx="18" fill="rgba(31,109,82,0.10)" stroke="rgba(29,42,36,0.10)"/>
+                <rect x="580" y="38" width="146" height="70" rx="18" fill="rgba(212,138,47,0.12)" stroke="rgba(29,42,36,0.10)"/>
+                <text x="48" y="72" font-size="18" font-weight="700" fill="#1d2a24">场景构建</text>
+                <text x="34" y="94" font-size="13" fill="#5f6d66">天气 / 土壤 / 作物 / 预算</text>
+                <text x="236" y="72" font-size="18" font-weight="700" fill="#1d2a24">策略生成</text>
+                <text x="222" y="94" font-size="13" fill="#5f6d66">阶段级 / 日粒度水肥方案</text>
+                <text x="430" y="72" font-size="18" font-weight="700" fill="#1d2a24">机理评估</text>
+                <text x="410" y="94" font-size="13" fill="#5f6d66">official DSSAT 整季仿真</text>
+                <text x="618" y="72" font-size="18" font-weight="700" fill="#1d2a24">结果评分</text>
+                <text x="608" y="94" font-size="13" fill="#5f6d66">产量 / reward / 综合分</text>
+                <path d="M162 74 L203 74" stroke="#1f6d52" stroke-width="6" stroke-linecap="round"/>
+                <path d="M350 74 L391 74" stroke="#1f6d52" stroke-width="6" stroke-linecap="round"/>
+                <path d="M538 74 L579 74" stroke="#1f6d52" stroke-width="6" stroke-linecap="round"/>
+                <path d="M652 126 C652 174, 90 174, 90 126" fill="none" stroke="#d48a2f" stroke-width="5" stroke-linecap="round" stroke-dasharray="7 8"/>
+                <text x="310" y="196" font-size="14" fill="#8b5a18">已经形成“策略提出 → DSSAT 评估 → 指标反馈”的研究闭环</text>
+              </svg>
+            </div>
+            <div class="columns-3">
+              <div class="mini-card">
+                <div class="kpi-value" style="font-size:26px;">official</div>
+                <div class="kpi-label">真实 DSSAT 后端已接通，不再只是代理环境。</div>
+              </div>
+              <div class="mini-card">
+                <div class="kpi-value" style="font-size:26px;">literature</div>
+                <div class="kpi-label">已从“启发式基线”升级到“文献基线”对比。</div>
+              </div>
+              <div class="mini-card">
+                <div class="kpi-value" style="font-size:26px;">daily</div>
+                <div class="kpi-label">日粒度控制已真实跑通，不再局限于阶段级决策。</div>
+              </div>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <h3>本阶段可直接对外表述的成果</h3>
+              <ul class="clean">
+                <li>已完成冬小麦 / 夏玉米双作物机理模型适配。</li>
+                <li>已完成文献基线、仅控水、仅控肥、联合控水肥的同口径比较。</li>
+                <li>已完成 120 个随机场景的大样本日粒度 clean rerun。</li>
+                <li>模型输出已从固定规则，推进到“按场景生成策略”。</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>为什么这件事有价值</h3>
+              <p class="section-note">
+                它把传统“经验管理”变成了“可计算、可比较、可优化”的决策问题。
+                对农业研究而言，这意味着可以在不增加田间试验成本的前提下，先在机理模型空间里快速筛选和评估大量水肥方案。
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="progress">
+          <div class="dot"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="frame">
+        <div class="header">
+          <div class="tag">核心结果</div>
+          <div class="page">03 / 07</div>
+        </div>
+        <h2>联合控水肥已表现出最好的阶段性结果</h2>
+        <p class="subtitle">在 120 个随机场景、23 个测试场景的 official DSSAT 日粒度 clean rerun 中，联合控制重新回到合理排序。</p>
+        <div class="columns-2" style="margin-top: 18px;">
+          <div class="stack">
+            <div class="metric-row head">
+              <div>控制模式</div><div>综合分</div><div>reward 增益</div><div>产量提升</div>
+            </div>
+            <div class="metric-row">
+              <div><strong>water_only</strong></div>
+              <div>54.003</div>
+              <div class="negative">-0.052</div>
+              <div class="negative">-0.631%</div>
+            </div>
+            <div class="metric-row">
+              <div><strong>nitrogen_only</strong></div>
+              <div>68.205</div>
+              <div class="positive">+4.127</div>
+              <div class="positive">+9.605%</div>
+            </div>
+            <div class="metric-row">
+              <div><strong>joint</strong></div>
+              <div>69.371</div>
+              <div class="positive">+4.531</div>
+              <div class="positive">+9.909%</div>
+            </div>
+            <div class="caption">结论：在修正后的日粒度 official DSSAT 流程中，排序已经恢复为 joint &gt; nitrogen_only &gt; water_only。</div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <h3>平均产量提升（%）</h3>
+              <svg width="100%" height="240" viewBox="0 0 420 240">
+                <line x1="56" y1="194" x2="390" y2="194" stroke="rgba(29,42,36,0.12)"/>
+                <line x1="56" y1="24" x2="56" y2="194" stroke="rgba(29,42,36,0.12)"/>
+                <rect x="92" y="183" width="62" height="11" rx="8" fill="#b94848"/>
+                <rect x="188" y="49" width="62" height="145" rx="8" fill="#d48a2f"/>
+                <rect x="284" y="44" width="62" height="150" rx="8" fill="#1f6d52"/>
+                <text x="82" y="176" font-size="13" fill="#7d2f2f">-0.63</text>
+                <text x="191" y="42" font-size="13" fill="#8b5a18">+9.61</text>
+                <text x="286" y="37" font-size="13" fill="#1f6d52">+9.91</text>
+                <text x="83" y="214" font-size="12" fill="#5f6d66">控水</text>
+                <text x="173" y="214" font-size="12" fill="#5f6d66">控肥</text>
+                <text x="268" y="214" font-size="12" fill="#5f6d66">联合</text>
+              </svg>
+            </div>
+            <div class="card">
+              <h3>平均 reward 增益</h3>
+              <svg width="100%" height="180" viewBox="0 0 420 180">
+                <line x1="56" y1="132" x2="390" y2="132" stroke="rgba(29,42,36,0.12)"/>
+                <rect x="88" y="132" width="66" height="5" rx="5" fill="#b94848"/>
+                <rect x="182" y="60" width="66" height="72" rx="8" fill="#d48a2f"/>
+                <rect x="276" y="53" width="66" height="79" rx="8" fill="#1f6d52"/>
+                <text x="94" y="152" font-size="13" fill="#7d2f2f">-0.05</text>
+                <text x="190" y="52" font-size="13" fill="#8b5a18">+4.13</text>
+                <text x="283" y="45" font-size="13" fill="#1f6d52">+4.53</text>
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div class="progress">
+          <div class="dot"></div><div class="dot"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="frame">
+        <div class="header">
+          <div class="tag">阶段价值</div>
+          <div class="page">04 / 07</div>
+        </div>
+        <h2>当前成果的学术与应用价值</h2>
+        <p class="subtitle">这一阶段的价值，不在于已经得到“最终最优策略”，而在于已经证明这条研究路线可以成立。</p>
+        <div class="roadmap" style="margin-top:22px;">
+          <div class="road-card">
+            <div class="road-num">01</div>
+            <h3>把经验管理变成可计算问题</h3>
+            <p class="small">把天气、土壤、作物、预算统一纳入同一决策框架，形成可重复、可比较的研究体系。</p>
+          </div>
+          <div class="road-card">
+            <div class="road-num">02</div>
+            <h3>把“水肥方案”变成可评估策略</h3>
+            <p class="small">不再只看单一产量，而是同时考虑产量、资源利用、预算约束与综合得分。</p>
+          </div>
+          <div class="road-card">
+            <div class="road-num">03</div>
+            <h3>为后续连续决策打基础</h3>
+            <p class="small">已经具备日粒度策略生成能力，下一步可以自然过渡到“每天根据实际情况再决策”。</p>
+          </div>
+        </div>
+        <div class="card" style="margin-top:18px;">
+          <div class="big-quote">
+            阶段性成果的核心价值是：我们已经证明“机理模型 + 智能策略生成”能够在 realistic 的 official DSSAT 条件下形成闭环，并开始产生优于文献基线的结果。
+          </div>
+        </div>
+        <div class="progress">
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="frame">
+        <div class="header">
+          <div class="tag">局限性</div>
+          <div class="page">05 / 07</div>
+        </div>
+        <h2>当前仍然存在的局限与难点</h2>
+        <div class="columns-3" style="margin-top:20px;">
+          <div class="card">
+            <h3>局限 1：仅控水结果仍不理想</h3>
+            <p class="section-note">
+              `water_only` 目前收益仍接近 0 或略为负值，说明单独依靠控水，在当前场景和奖励体系下还不足以稳定带来收益。
+            </p>
+          </div>
+          <div class="card">
+            <h3>局限 2：日粒度训练更难</h3>
+            <p class="section-note">
+              决策更细，动作空间更大，训练容易受到农艺约束、基线结构和数值稳定性的影响，需要更多数据与更强约束。
+            </p>
+          </div>
+          <div class="card">
+            <h3>局限 3：还停留在仿真闭环</h3>
+            <p class="section-note">
+              当前结果来自 official DSSAT 仿真，下一步仍需考虑农户真实执行偏差、现场反馈和更贴近生产的连续决策。
+            </p>
+          </div>
+        </div>
+        <div class="card" style="margin-top:18px;">
+          <h3>现阶段不宜过度宣称的内容</h3>
+          <ul class="clean">
+            <li>还不能说“所有场景下联合控制都已完全最优”。</li>
+            <li>还不能说“仅控水一定无效”，它更可能是当前场景与训练条件下表现偏弱。</li>
+            <li>还不能替代田间试验，只能作为高效率筛选与推演工具。</li>
+          </ul>
+        </div>
+        <div class="progress">
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot active"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="frame">
+        <div class="header">
+          <div class="tag">目标与下一步</div>
+          <div class="page">06 / 07</div>
+        </div>
+        <h2>下一阶段希望达到的结果</h2>
+        <div class="columns-2" style="margin-top:16px;">
+          <div class="stack">
+            <div class="card">
+              <h3>目标排序</h3>
+              <svg width="100%" height="260" viewBox="0 0 520 260">
+                <text x="40" y="42" font-size="18" font-weight="700" fill="#1d2a24">期望在更大样本和更稳训练下达到：</text>
+                <rect x="52" y="84" width="136" height="64" rx="16" fill="rgba(31,109,82,0.12)"/>
+                <rect x="216" y="104" width="136" height="44" rx="16" fill="rgba(212,138,47,0.16)"/>
+                <rect x="380" y="122" width="96" height="26" rx="13" fill="rgba(31,109,82,0.08)"/>
+                <text x="88" y="122" font-size="24" font-weight="800" fill="#1f6d52">joint</text>
+                <text x="238" y="132" font-size="18" font-weight="700" fill="#8b5a18">nitrogen_only</text>
+                <text x="412" y="139" font-size="18" font-weight="700" fill="#1d2a24">0</text>
+                <path d="M188 118 L214 118" stroke="#1f6d52" stroke-width="5" stroke-linecap="round"/>
+                <path d="M352 126 L378 126" stroke="#1f6d52" stroke-width="5" stroke-linecap="round"/>
+
+                <rect x="52" y="176" width="136" height="64" rx="16" fill="rgba(31,109,82,0.12)"/>
+                <rect x="216" y="196" width="136" height="44" rx="16" fill="rgba(191,76,76,0.12)"/>
+                <rect x="380" y="214" width="96" height="26" rx="13" fill="rgba(31,109,82,0.08)"/>
+                <text x="88" y="214" font-size="24" font-weight="800" fill="#1f6d52">joint</text>
+                <text x="254" y="224" font-size="18" font-weight="700" fill="#7d2f2f">water_only</text>
+                <text x="412" y="231" font-size="18" font-weight="700" fill="#1d2a24">0</text>
+                <path d="M188 210 L214 210" stroke="#1f6d52" stroke-width="5" stroke-linecap="round"/>
+                <path d="M352 218 L378 218" stroke="#1f6d52" stroke-width="5" stroke-linecap="round"/>
+              </svg>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <h3>下一步重点</h3>
+              <ul class="clean">
+                <li>继续扩大样本规模，提升联合控制训练稳定性。</li>
+                <li>继续强化日粒度约束与奖励设计，避免异常策略。</li>
+                <li>把“仿真最优”逐步推进到“可执行、可解释、可反馈”的生产决策。</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>核心判断</h3>
+              <p class="section-note">
+                当前不是否定联合控制，而是已经初步证明：
+                联合控制在合理约束和足够样本下有潜力成为最优方向，下一阶段要做的是把这种优势稳定下来。
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="progress">
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot active"></div><div class="dot"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="frame">
+        <div class="header">
+          <div class="tag">未来规划</div>
+          <div class="page">07 / 07</div>
+        </div>
+        <h2>从“离线推荐”走向“连续决策”</h2>
+        <p class="subtitle">下一步不再只是一次性给出整季方案，而是逐日接收实际执行信息，滚动修正第二天建议。</p>
+        <div class="card" style="margin-top:18px;">
+          <svg width="100%" height="300" viewBox="0 0 1040 300">
+            <rect x="24" y="88" width="180" height="88" rx="22" fill="rgba(31,109,82,0.10)" stroke="rgba(29,42,36,0.10)"/>
+            <rect x="256" y="88" width="180" height="88" rx="22" fill="rgba(212,138,47,0.12)" stroke="rgba(29,42,36,0.10)"/>
+            <rect x="488" y="88" width="180" height="88" rx="22" fill="rgba(31,109,82,0.10)" stroke="rgba(29,42,36,0.10)"/>
+            <rect x="720" y="88" width="180" height="88" rx="22" fill="rgba(212,138,47,0.12)" stroke="rgba(29,42,36,0.10)"/>
+            <text x="62" y="126" font-size="20" font-weight="700" fill="#1d2a24">当天状态</text>
+            <text x="56" y="150" font-size="14" fill="#5f6d66">天气 / 土壤 / 作物进程</text>
+            <text x="294" y="126" font-size="20" font-weight="700" fill="#1d2a24">模型建议</text>
+            <text x="286" y="150" font-size="14" fill="#5f6d66">给出第二天操作建议</text>
+            <text x="522" y="126" font-size="20" font-weight="700" fill="#1d2a24">农民实际执行</text>
+            <text x="518" y="150" font-size="14" fill="#5f6d66">可能偏离推荐操作</text>
+            <text x="754" y="126" font-size="20" font-weight="700" fill="#1d2a24">再反馈再决策</text>
+            <text x="742" y="150" font-size="14" fill="#5f6d66">根据现实重新推荐</text>
+            <path d="M204 132 L256 132" stroke="#1f6d52" stroke-width="7" stroke-linecap="round"/>
+            <path d="M436 132 L488 132" stroke="#1f6d52" stroke-width="7" stroke-linecap="round"/>
+            <path d="M668 132 L720 132" stroke="#1f6d52" stroke-width="7" stroke-linecap="round"/>
+            <path d="M810 210 C810 252, 122 252, 122 188" fill="none" stroke="#d48a2f" stroke-width="6" stroke-dasharray="8 10" stroke-linecap="round"/>
+            <text x="328" y="280" font-size="18" fill="#8b5a18" font-weight="700">目标：把“推荐一次”升级为“每天根据实际情况滚动调整”</text>
+          </svg>
+        </div>
+        <div class="columns-3" style="margin-top:16px;">
+          <div class="mini-card">
+            <h3>更贴近生产</h3>
+            <p class="small">考虑农民实际执行偏差，而不是假设严格按推荐操作。</p>
+          </div>
+          <div class="mini-card">
+            <h3>更强鲁棒性</h3>
+            <p class="small">当天实际情况变化后，模型仍能给出次日可执行建议。</p>
+          </div>
+          <div class="mini-card">
+            <h3>更高应用价值</h3>
+            <p class="small">从离线仿真策略，逐步走向可落地的数字农业助手。</p>
+          </div>
+        </div>
+        <div class="progress">
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot active"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll(".slide"));
+    let index = 0;
+    const show = (next) => {
+      index = (next + slides.length) % slides.length;
+      slides.forEach((slide, i) => slide.classList.toggle("active", i === index));
+    };
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") show(index + 1);
+      if (event.key === "ArrowLeft" || event.key === "PageUp") show(index - 1);
+    });
+    window.addEventListener("click", () => show(index + 1));
+  </script>
+</body>
+</html>

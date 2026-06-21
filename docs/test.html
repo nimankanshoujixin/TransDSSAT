@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Baseline Paper Briefing</title>
+  <style>
+    :root {
+      --bg: #f5f2ea;
+      --paper: #fffdf8;
+      --ink: #1f2937;
+      --muted: #667085;
+      --line: #ddd4c6;
+      --accent: #165d8c;
+      --accent2: #ba6228;
+      --blue: #eaf3fb;
+      --orange: #fbefe4;
+      --green: #edf7ef;
+      --shadow: 0 18px 48px rgba(58, 50, 35, 0.12);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+      background: radial-gradient(circle at top right, #f6ead8 0, #f5f2ea 35%, #efe9df 100%);
+      color: var(--ink);
+      overflow: hidden;
+    }
+    .deck { width: 100vw; height: 100vh; position: relative; }
+    .slide {
+      display: none;
+      width: 100%;
+      height: 100%;
+      padding: 36px 52px 30px;
+      background: linear-gradient(180deg, rgba(255,253,248,.97), rgba(255,250,243,.97));
+    }
+    .slide.active { display: flex; flex-direction: column; }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 20px;
+    }
+    .title { font-size: 31px; font-weight: 800; line-height: 1.2; }
+    .subtitle { font-size: 14px; color: var(--muted); margin-top: 8px; }
+    .page { font-size: 14px; color: var(--muted); min-width: 76px; text-align: right; }
+    .content { flex: 1; display: grid; gap: 18px; min-height: 0; }
+    .grid-2 { grid-template-columns: 1.15fr 1fr; }
+    .grid-2-eq { grid-template-columns: 1fr 1fr; }
+    .grid-3 { grid-template-columns: repeat(3, 1fr); }
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 18px 20px;
+      min-height: 0;
+    }
+    .card h3 { margin: 0 0 12px; font-size: 18px; }
+    .card h4 { margin: 0 0 8px; font-size: 15px; color: var(--accent); }
+    .lead { font-size: 21px; line-height: 1.55; font-weight: 700; }
+    .pill-row { display: flex; flex-wrap: wrap; gap: 10px; }
+    .pill {
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: var(--blue);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      border: 1px solid #cddded;
+    }
+    .soft {
+      border-radius: 16px;
+      padding: 14px 15px;
+      border: 1px solid #e5dccd;
+      background: #fcf8f1;
+    }
+    .soft.blue { background: var(--blue); border-color: #d5e4f2; }
+    .soft.orange { background: var(--orange); border-color: #ebd3bf; }
+    .soft.green { background: var(--green); border-color: #d4e8d7; }
+    .metric-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+    .metric {
+      background: #fbf8f1;
+      border: 1px solid #e8dece;
+      border-radius: 16px;
+      padding: 13px 14px;
+    }
+    .metric .k { font-size: 12px; color: var(--muted); margin-bottom: 7px; }
+    .metric .v { font-size: 22px; font-weight: 800; line-height: 1.15; }
+    .big { font-size: 44px; font-weight: 900; line-height: 1; color: var(--accent); margin-bottom: 10px; }
+    ul.clean { margin: 0; padding-left: 20px; line-height: 1.65; font-size: 15px; }
+    .note { font-size: 13px; color: var(--muted); line-height: 1.6; }
+    .source { font-size: 13px; color: var(--muted); line-height: 1.7; }
+    .source a { color: var(--accent); text-decoration: none; }
+    .figure-box {
+      border: 2px dashed #d6c8b4;
+      border-radius: 18px;
+      padding: 14px 16px;
+      background: linear-gradient(180deg, #fffdf9, #fcf6ec);
+      min-height: 115px;
+    }
+    .fig-title { font-size: 15px; font-weight: 800; color: var(--accent2); margin-bottom: 8px; }
+    .fig-desc { font-size: 14px; color: #5c5245; line-height: 1.6; }
+    .matrix { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .matrix th, .matrix td {
+      border: 1px solid #e5dbc9;
+      padding: 10px 8px;
+      text-align: center;
+      vertical-align: middle;
+    }
+    .matrix th { background: #f8f1e5; font-weight: 800; }
+    .matrix td.left { text-align: left; font-weight: 700; background: #fdf9f0; }
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr 56px 1fr 56px 1fr;
+      align-items: center;
+      gap: 8px;
+    }
+    .flow .box {
+      min-height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid #d8e5f0;
+      background: var(--blue);
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.5;
+    }
+    .flow .box.orange { border-color: #e6d0bd; background: var(--orange); color: #7b4a20; }
+    .flow .box.green { border-color: #d0e3d4; background: var(--green); color: #2b6f36; }
+    .arrow { text-align: center; font-size: 30px; color: var(--muted); font-weight: 900; }
+    .compare { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .compare .col {
+      border: 1px solid #e8dece;
+      background: #fffdf8;
+      border-radius: 18px;
+      padding: 14px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: #eff5ff;
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 16px;
+    }
+    .nav-hint {
+      position: fixed;
+      right: 18px;
+      bottom: 14px;
+      font-size: 12px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.76);
+      border: 1px solid #ddd1c0;
+      border-radius: 999px;
+      padding: 7px 10px;
+      backdrop-filter: blur(8px);
+    }
+  </style>
+</head>
+<body>
+  <div class="deck">
+    <section class="slide active">
+      <div class="header">
+        <div>
+          <div class="title">baseline 论文汇报：<br>我们到底从这篇农学论文里拿了什么</div>
+          <div class="subtitle">面向计算机专业老师 | 只讲 baseline 论文本身，以及它在我们当前 pipeline 里的具体形态</div>
+        </div>
+        <div class="page">01 / 07</div>
+      </div>
+      <div class="content grid-2">
+        <div class="card">
+          <div class="lead">这篇论文不是在讲 AI，而是在讲：<br><b>冬小麦—夏玉米轮作里，能否通过更合理的关键期灌溉和分次施氮，实现节水节肥而不明显减产。</b></div>
+          <div style="height:12px"></div>
+          <div class="pill-row">
+            <span class="pill">冬小麦—夏玉米轮作</span>
+            <span class="pill">华北平原</span>
+            <span class="pill">滴灌施肥</span>
+            <span class="pill">4 年田间试验</span>
+          </div>
+          <div style="height:18px"></div>
+          <div class="metric-grid">
+            <div class="metric">
+              <div class="k">论文提供的价值</div>
+              <div class="v">专家型水肥管理规则</div>
+            </div>
+            <div class="metric">
+              <div class="k">我们用它做什么</div>
+              <div class="v">baseline</div>
+            </div>
+            <div class="metric">
+              <div class="k">不是做什么</div>
+              <div class="v">不是训练模型</div>
+            </div>
+            <div class="metric">
+              <div class="k">真正要讲的重点</div>
+              <div class="v">如何被抽象进 pipeline</div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>论文信息</h3>
+          <div class="source">
+            Li et al., 2023, <i>Agricultural Water Management</i><br>
+            <b>An alternative water-fertilizer-saving management practice for wheat-maize cropping system in the North China Plain: Based on a 4-year field study</b><br>
+            DOI: <a href="https://doi.org/10.1016/j.agwat.2022.108053">10.1016/j.agwat.2022.108053</a><br>
+            开放版 PDF: <a href="https://repo.mel.cgiar.org/items/98ccf946-3027-483d-88d9-f1d111eab277">CGIAR Repository</a>
+          </div>
+          <div style="height:14px"></div>
+          <div class="figure-box">
+            <div class="fig-title">建议截图 1：论文 Fig. 1</div>
+            <div class="fig-desc">作用：让听众先看到论文面对的是多年真实天气波动，而不是一个固定理想季节。</div>
+          </div>
+          <div style="height:12px"></div>
+          <div class="figure-box">
+            <div class="fig-title">建议截图 2：论文 Table 2</div>
+            <div class="fig-desc">最关键。这里列出了各 treatment 的灌溉时点和施氮量，是我们提取 baseline 的核心来源。</div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <div>这一页回答：为什么这篇论文值得被当作 baseline。</div>
+        <div>Baseline paper briefing</div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="header">
+        <div class="title">把论文缩写翻译成人话：DI0 / DI3 / DI5，N0 / N60% / N100% 到底是什么</div>
+        <div class="page">02 / 07</div>
+      </div>
+      <div class="content grid-2-eq">
+        <div class="card">
+          <h3>灌溉标签：DI0 / DI3 / DI5</h3>
+          <div class="soft orange">
+            它们表示的是：<b>这一季打算在多少个关键时期补水</b>，可以理解为不同“灌溉强度方案”。
+          </div>
+          <div style="height:14px"></div>
+          <table class="matrix">
+            <tr>
+              <th style="width:120px">标签</th>
+              <th>通俗解释</th>
+            </tr>
+            <tr>
+              <td><b>DI0</b></td>
+              <td class="left">作物出苗后基本不再专门补水，可以理解为“非常保守的灌溉方案”。</td>
+            </tr>
+            <tr>
+              <td><b>DI3</b></td>
+              <td class="left">只在几个最关键的生长时期补水，可以理解为“中等强度灌溉方案”。</td>
+            </tr>
+            <tr>
+              <td><b>DI5</b></td>
+              <td class="left">在更多关键时期补水，可以理解为“较充分的灌溉方案”。</td>
+            </tr>
+          </table>
+        </div>
+        <div class="card">
+          <h3>施氮标签：N0 / N60% / N100%</h3>
+          <div class="soft blue">
+            它们表示的是：<b>相对于当地常规施氮水平，这一季打算施多少肥</b>，可以理解为不同“施氮强度方案”。
+          </div>
+          <div style="height:14px"></div>
+          <table class="matrix">
+            <tr>
+              <th style="width:120px">标签</th>
+              <th>通俗解释</th>
+            </tr>
+            <tr>
+              <td><b>N0</b></td>
+              <td class="left">不施氮，作为极端对照。</td>
+            </tr>
+            <tr>
+              <td><b>N60%</b></td>
+              <td class="left">施当地常规推荐量的 60%，可理解为“减肥方案”。</td>
+            </tr>
+            <tr>
+              <td><b>N100%</b></td>
+              <td class="left">按当地常规推荐量足量施肥，可理解为“常规足肥方案”。</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+      <div class="footer">
+        <div>这一页回答：这些缩写不是算法名，而是“水方案”和“肥方案”的实验标签。</div>
+        <div>Terminology translation</div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="header">
+        <div class="title">论文真正有价值的内容：不是某个数字，而是一套“关键期调度结构”</div>
+        <div class="page">03 / 07</div>
+      </div>
+      <div class="content grid-2-eq">
+        <div class="card">
+          <h3>我们从论文里读到的核心知识</h3>
+          <ul class="clean">
+            <li>冬小麦应在哪些关键时期补水</li>
+            <li>夏玉米应在哪些关键时期补水</li>
+            <li>氮肥是一次施完，还是分次施入</li>
+            <li>基肥和追肥各占多少比例</li>
+          </ul>
+          <div style="height:14px"></div>
+          <div class="soft green">
+            从计算机视角看，论文最有价值的不是“固定总量”，而是：<br>
+            <b>什么时候操作 + 各时段分配多少比例</b>
+          </div>
+        </div>
+        <div class="card">
+          <h3>我们抽取出的结构</h3>
+          <div class="compare">
+            <div class="col">
+              <span class="badge">冬小麦</span>
+              <h4>关键补水期</h4>
+              <ul class="clean">
+                <li>拔节期</li>
+                <li>开花期</li>
+              </ul>
+            </div>
+            <div class="col">
+              <span class="badge">夏玉米</span>
+              <h4>关键补水期</h4>
+              <ul class="clean">
+                <li>苗期</li>
+                <li>拔节期</li>
+                <li>抽雄期</li>
+              </ul>
+            </div>
+            <div class="col">
+              <span class="badge">施氮方式</span>
+              <h4>分配结构</h4>
+              <ul class="clean">
+                <li>40% 基肥</li>
+                <li>60% 追肥</li>
+                <li>追肥尽量结合灌溉</li>
+              </ul>
+            </div>
+          </div>
+          <div style="height:14px"></div>
+          <div class="figure-box">
+            <div class="fig-title">建议截图：论文 Table 2 局部放大</div>
+            <div class="fig-desc">建议截出 wheat 与 maize 两季的灌溉时点，以及 40/60 的施氮结构，这样老师会很直观地看到“我们究竟抽了什么”。</div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <div>这一页回答：这篇论文本质上给了我们一套专家型“时间结构”。</div>
+        <div>What the paper really gives us</div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="header">
+        <div class="title">我们当前 pipeline 中，baseline 策略到底是什么</div>
+        <div class="page">04 / 07</div>
+      </div>
+      <div class="content grid-2">
+        <div class="card">
+          <h3>当前真正使用的 baseline 名称</h3>
+          <div class="big">literature_ncp</div>
+          <div class="soft blue">
+            它不是“论文原始策略的原样复刻”，而是：<br>
+            <b>基于论文结构改写出的 North China Plain literature-informed baseline</b>
+          </div>
+          <div style="height:14px"></div>
+          <ul class="clean">
+            <li>保留论文的关键灌溉时点</li>
+            <li>保留论文的施氮分配结构（40% 基肥 + 60% 追肥）</li>
+            <li>但总水量和总氮量不固定死，而是按当前场景预算缩放</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>当前 baseline 的具体执行方式</h3>
+          <table class="matrix">
+            <tr>
+              <th>部分</th>
+              <th>当前 pipeline 中的 baseline 定义</th>
+            </tr>
+            <tr>
+              <td class="left">冬小麦灌溉</td>
+              <td>在拔节期、开花期分配灌溉预算</td>
+            </tr>
+            <tr>
+              <td class="left">夏玉米灌溉</td>
+              <td>在苗期、拔节期、抽雄期分配灌溉预算</td>
+            </tr>
+            <tr>
+              <td class="left">施氮结构</td>
+              <td>总氮预算中 40% 作为基肥，60% 作为后续追肥</td>
+            </tr>
+            <tr>
+              <td class="left">预算来源</td>
+              <td>默认使用当前场景自己的水预算和氮预算</td>
+            </tr>
+            <tr>
+              <td class="left">作用方式</td>
+              <td>生成一套可直接送进 DSSAT 的管理事件</td>
+            </tr>
+          </table>
+        </div>
+      </div>
+      <div class="footer">
+        <div>这一页回答：我们现在用的 baseline 到底是什么，不再停留在“来自某篇论文”这种笼统说法。</div>
+        <div>Current baseline in our pipeline</div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="header">
+        <div class="title">为什么我们没有直接照搬论文里的绝对数值</div>
+        <div class="page">05 / 07</div>
+      </div>
+      <div class="content grid-2-eq">
+        <div class="card">
+          <h3>直接照搬会带来的问题</h3>
+          <ul class="clean">
+            <li>论文是在特定地点、特定灌溉设施、特定推荐施氮体系下得到的。</li>
+            <li>而我们的场景会随机变化：
+              <br>天气不同
+              <br>土壤不同
+              <br>预算不同
+            </li>
+            <li>如果把论文中的固定总量硬套到所有场景，比较会不公平。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>所以我们采用的办法</h3>
+          <table class="matrix">
+            <tr>
+              <th>保留</th>
+              <th>缩放 / 改写</th>
+            </tr>
+            <tr>
+              <td>关键时点</td>
+              <td>总水量按场景预算缩放</td>
+            </tr>
+            <tr>
+              <td>基肥 / 追肥比例</td>
+              <td>总氮量按场景预算缩放</td>
+            </tr>
+            <tr>
+              <td>冬小麦 / 夏玉米的管理节奏</td>
+              <td>把固定 treatment 改成通用可执行规则</td>
+            </tr>
+          </table>
+          <div style="height:14px"></div>
+          <div class="soft orange">
+            换句话说，我们保留的是论文的<b>管理逻辑</b>，不是把论文的<b>固定绝对量</b>原封不动搬过来。
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <div>这一页回答：为什么 current baseline 是 “literature-informed”，而不是 “paper-exact”。</div>
+        <div>Why not copy paper numbers directly</div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="header">
+        <div class="title">如果用一句话概括：这篇论文在我们的项目里扮演什么角色</div>
+        <div class="page">06 / 07</div>
+      </div>
+      <div class="content grid-2">
+        <div class="card">
+          <div class="big">不是</div>
+          <div class="lead">“把论文 treatment 直接抄进代码”</div>
+          <div style="height:16px"></div>
+          <div class="big" style="color: var(--accent2);">而是</div>
+          <div class="lead">“把论文中的专家管理知识，抽象成当前场景下可执行的基准策略”。</div>
+        </div>
+        <div class="card">
+          <h3>对我们当前项目的直接作用</h3>
+          <ul class="clean">
+            <li>它给了我们一个比内部 heuristic 更可信的 baseline 来源。</li>
+            <li>它让 baseline 不再是随手写的规则，而是有农学试验支撑的专家方案。</li>
+            <li>它也帮助我们把“论文知识”变成了可程序化的管理结构。</li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer">
+        <div>这一页回答：论文在项目里的角色，是“专家知识来源”，不是“直接可用程序”。</div>
+        <div>Role of the paper</div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="header">
+        <div class="title">建议的最终口头表达</div>
+        <div class="page">07 / 07</div>
+      </div>
+      <div class="content grid-2-eq">
+        <div class="card">
+          <h3>可以直接对老师这样讲</h3>
+          <div class="soft green" style="font-size:16px; line-height:1.8;">
+            我们没有把这篇论文里的 treatment 数字直接照搬到所有场景里。<br>
+            我们真正拿来用的，是它总结出的关键期灌溉结构和分次施氮结构。<br>
+            在当前 pipeline 中，这被实现成一个叫 <b>literature_ncp</b> 的 baseline：<br>
+            它保留论文的管理时序，但把总水量和总氮量缩放到当前场景预算下，从而变成一套可执行的基准策略。
+          </div>
+        </div>
+        <div class="card">
+          <h3>建议你手动补的截图</h3>
+          <ul class="clean">
+            <li><b>Fig. 1</b>：说明试验面对的是真实天气波动</li>
+            <li><b>Table 2</b>：说明 treatment 结构，是最关键的一张</li>
+            <li><b>Fig. 2</b>：说明论文不只关注产量，也关注资源利用与环境代价</li>
+          </ul>
+          <div style="height:16px"></div>
+          <div class="note">如果你愿意，下一步我可以继续把 Table 2 对应到我们当前 baseline 的“逐项映射表”单独再做一页，便于你讲代码实现之前的抽象逻辑。</div>
+        </div>
+      </div>
+      <div class="footer">
+        <div>这一页回答：你可以怎么把 baseline 论文和我们当前方案的关系清楚地讲出去。</div>
+        <div>End</div>
+      </div>
+    </section>
+  </div>
+
+  <div class="nav-hint">← / → 翻页</div>
+  <script>
+    const slides = Array.from(document.querySelectorAll('.slide'));
+    let index = 0;
+    function show(i) {
+      slides[index].classList.remove('active');
+      index = (i + slides.length) % slides.length;
+      slides[index].classList.add('active');
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') show(index + 1);
+      if (e.key === 'ArrowLeft' || e.key === 'PageUp') show(index - 1);
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('a')) show(index + 1);
+    });
+  </script>
+</body>
+</html>

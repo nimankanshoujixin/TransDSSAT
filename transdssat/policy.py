@@ -8,8 +8,7 @@ from typing import Iterable
 from transdssat.domain import CropState
 
 
-IRRIGATION_BINS = (0.0, 10.0, 18.0, 28.0, 40.0, 55.0, 70.0)
-NITROGEN_BINS = (0.0, 10.0, 20.0, 30.0, 40.0, 60.0, 80.0)
+DEFAULT_CONTINUOUS_ACTION_SCALE = 500.0
 
 
 def encode_state(state: CropState) -> list[float]:
@@ -28,10 +27,6 @@ def encode_state(state: CropState) -> list[float]:
         float(state.et0_mm),
         float(state.radiation_mj_m2),
     ]
-
-
-def action_bin_index(value: float, bins: tuple[float, ...]) -> int:
-    return min(range(len(bins)), key=lambda index: abs(value - bins[index]))
 
 
 def iter_supervised_examples(dataset_path: str | Path) -> Iterable[tuple[list[list[float]], tuple[float, float]]]:
@@ -86,8 +81,8 @@ try:
             )
             self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
             self.norm = nn.LayerNorm(hidden_dim)
-            self.irrigation_head = nn.Linear(hidden_dim, len(IRRIGATION_BINS))
-            self.nitrogen_head = nn.Linear(hidden_dim, len(NITROGEN_BINS))
+            self.irrigation_head = nn.Linear(hidden_dim, 1)
+            self.nitrogen_head = nn.Linear(hidden_dim, 1)
 
         def forward(
             self,
@@ -102,7 +97,9 @@ try:
                 lengths = (~padding_mask).sum(dim=1).clamp(min=1) - 1
                 pooled = encoded[torch.arange(encoded.size(0), device=encoded.device), lengths]
             pooled = self.norm(pooled)
-            return self.irrigation_head(pooled), self.nitrogen_head(pooled)
+            irrigation = torch.sigmoid(self.irrigation_head(pooled)).squeeze(-1) * DEFAULT_CONTINUOUS_ACTION_SCALE
+            nitrogen = torch.sigmoid(self.nitrogen_head(pooled)).squeeze(-1) * DEFAULT_CONTINUOUS_ACTION_SCALE
+            return irrigation, nitrogen
 
 
 except ImportError:  # pragma: no cover - depends on local environment
@@ -128,24 +125,29 @@ def training_readiness() -> TrainingReadiness:
     )
 
 
-if TORCH_AVAILABLE:
-    def collate_supervised_batch(
-        batch: list[tuple[list[list[float]], tuple[float, float]]]
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        batch_size = len(batch)
-        max_len = max(len(sequence) for sequence, _ in batch)
-        input_dim = len(batch[0][0][0])
-        features = torch.zeros((batch_size, max_len, input_dim), dtype=torch.float32)
-        padding_mask = torch.ones((batch_size, max_len), dtype=torch.bool)
-        irrigation_targets = torch.zeros(batch_size, dtype=torch.long)
-        nitrogen_targets = torch.zeros(batch_size, dtype=torch.long)
+def collate_supervised_batch(
+    batch: list[tuple[list[list[float]], tuple[float, float]]],
+    device: "torch.device | str | None" = None,
+) -> tuple["torch.Tensor", "torch.Tensor", "torch.Tensor", "torch.Tensor"]:
+    if not TORCH_AVAILABLE:
+        raise RuntimeError("PyTorch is required to collate supervised Transformer batches.")
 
-        for row_index, (sequence, action) in enumerate(batch):
-            seq_tensor = torch.tensor(sequence, dtype=torch.float32)
-            length = seq_tensor.size(0)
-            features[row_index, :length, :] = seq_tensor
-            padding_mask[row_index, :length] = False
-            irrigation_targets[row_index] = action_bin_index(action[0], IRRIGATION_BINS)
-            nitrogen_targets[row_index] = action_bin_index(action[1], NITROGEN_BINS)
+    import torch
 
-        return features, padding_mask, irrigation_targets, nitrogen_targets
+    batch_size = len(batch)
+    max_len = max(len(sequence) for sequence, _ in batch)
+    input_dim = len(batch[0][0][0])
+    features = torch.zeros((batch_size, max_len, input_dim), dtype=torch.float32, device=device)
+    padding_mask = torch.ones((batch_size, max_len), dtype=torch.bool, device=device)
+    irrigation_targets = torch.zeros(batch_size, dtype=torch.float32, device=device)
+    nitrogen_targets = torch.zeros(batch_size, dtype=torch.float32, device=device)
+
+    for row_index, (sequence, action) in enumerate(batch):
+        seq_tensor = torch.tensor(sequence, dtype=torch.float32, device=device)
+        length = seq_tensor.size(0)
+        features[row_index, :length, :] = seq_tensor
+        padding_mask[row_index, :length] = False
+        irrigation_targets[row_index] = float(action[0])
+        nitrogen_targets[row_index] = float(action[1])
+
+    return features, padding_mask, irrigation_targets, nitrogen_targets

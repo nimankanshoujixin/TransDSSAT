@@ -38,13 +38,16 @@ class DSSATInputBuilder:
 
         template_dir = None
         if self.config.template_root is not None:
-            template_dir = (
-                self.config.template_root.resolve() / (scenario.template_name or scenario.crop_spec.crop_name)
-            )
-            if template_dir.exists():
-                self._copy_tree(template_dir, run_dir)
-            else:
-                template_dir = None
+            template_root = self.config.template_root.resolve()
+            candidate_names = [scenario.template_name, f"{scenario.crop_spec.crop_name}_quzhou_base", scenario.crop_spec.crop_name]
+            for candidate_name in candidate_names:
+                if not candidate_name:
+                    continue
+                candidate_dir = template_root / candidate_name
+                if candidate_dir.exists():
+                    template_dir = candidate_dir
+                    self._copy_tree(candidate_dir, run_dir)
+                    break
 
         policy_path = (run_dir / "transdssat_policy.tsv").resolve()
         weather_path = (run_dir / "transdssat_weather.csv").resolve()
@@ -66,6 +69,11 @@ class DSSATInputBuilder:
                     "crop_name": scenario.crop_spec.crop_name,
                     "planting_date": scenario.planting_date,
                     "cultivar_code": scenario.cultivar_code,
+                    "cultivar_id": scenario.cultivar_id,
+                    "crop_context": scenario.crop_context.to_dict() if scenario.crop_context is not None else {},
+                    "objective_context": scenario.objective_context.to_dict(),
+                    "decision_context": scenario.decision_context.to_dict(),
+                    "state_interface_contract": scenario.state_interface_contract_dict(),
                     "template_name": scenario.template_name,
                     "experiment_file": scenario.experiment_file,
                     "site_name": scenario.site_name,

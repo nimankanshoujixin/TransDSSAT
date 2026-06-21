@@ -11,6 +11,9 @@ from .config import DSSATRunConfig, split_command
 from .inputs import DSSATInputBuilder, DSSATRunContext
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
 @dataclass(slots=True)
 class DSSATRunResult:
     context: DSSATRunContext
@@ -39,7 +42,13 @@ class DSSATRunner:
         stderr_path = context.run_dir / "transdssat_stderr.log"
 
         if self.config.preprocess_command:
-            self._run_command(self.config.preprocess_command, context, stdout_path, stderr_path)
+            self._run_command(
+                self.config.preprocess_command,
+                context,
+                stdout_path,
+                stderr_path,
+                cwd=PROJECT_ROOT,
+            )
 
         if not self.config.run_command:
             raise RuntimeError(
@@ -61,6 +70,8 @@ class DSSATRunner:
         context: DSSATRunContext,
         stdout_path: Path,
         stderr_path: Path,
+        *,
+        cwd: Path | None = None,
     ) -> int:
         command = command_template.format(
             run_dir=str(context.run_dir),
@@ -78,7 +89,7 @@ class DSSATRunner:
             with stderr_path.open("a", encoding="utf-8") as stderr_handle:
                 result = subprocess.run(
                     argv,
-                    cwd=context.run_dir,
+                    cwd=cwd or context.run_dir,
                     stdout=stdout_handle,
                     stderr=stderr_handle,
                     check=False,

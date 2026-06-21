@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TransDSSAT 已完成工作汇报</title>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --bg-2: #efe6d8;
+      --paper: rgba(255, 251, 245, 0.9);
+      --paper-strong: #fffaf3;
+      --ink: #1d2b24;
+      --muted: #627168;
+      --line: rgba(29, 43, 36, 0.12);
+      --green: #1f6d52;
+      --amber: #c7852a;
+      --blue-soft: #eaf3f7;
+      --green-soft: #edf6ef;
+      --amber-soft: #fbf1e2;
+      --shadow: 0 20px 52px rgba(45, 55, 50, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      color: var(--ink);
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at 10% 12%, rgba(199, 133, 42, 0.16), transparent 22%),
+        radial-gradient(circle at 92% 84%, rgba(31, 109, 82, 0.18), transparent 24%),
+        linear-gradient(135deg, var(--bg) 0%, var(--bg-2) 48%, #f7f2e8 100%);
+    }
+
+    .deck {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .slide {
+      display: none;
+      width: 100%;
+      height: 100%;
+      padding: 40px 52px;
+    }
+
+    .slide.active { display: block; }
+
+    .frame {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      padding: 32px 34px 26px;
+      border-radius: 30px;
+      border: 1px solid var(--line);
+      background:
+        linear-gradient(135deg, rgba(255, 253, 248, 0.92), rgba(255, 248, 238, 0.9)),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.15));
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .frame::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(120deg, rgba(31, 109, 82, 0.05), transparent 26%),
+        linear-gradient(300deg, rgba(199, 133, 42, 0.07), transparent 30%);
+      pointer-events: none;
+    }
+
+    .header {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(31, 109, 82, 0.09);
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+
+    .page {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+
+    h1, h2, h3, p {
+      margin: 0;
+      position: relative;
+      z-index: 2;
+    }
+
+    h1 {
+      margin-top: 14px;
+      font-size: 44px;
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+    }
+
+    h2 {
+      margin-top: 10px;
+      margin-bottom: 8px;
+      font-size: 30px;
+      line-height: 1.14;
+    }
+
+    h3 {
+      font-size: 18px;
+      line-height: 1.25;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      margin-top: 12px;
+      max-width: 900px;
+      font-size: 18px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .content {
+      position: relative;
+      z-index: 2;
+      height: calc(100% - 116px);
+      display: grid;
+      gap: 16px;
+    }
+
+    .hero { grid-template-columns: 1.08fr 0.92fr; }
+    .grid-2 { grid-template-columns: 1fr 1fr; }
+
+    .stack {
+      display: grid;
+      gap: 14px;
+      min-height: 0;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: var(--paper);
+      padding: 18px 18px 16px;
+      min-height: 0;
+    }
+
+    .card.strong { background: var(--paper-strong); }
+    .soft { border-radius: 18px; border: 1px solid var(--line); padding: 14px 14px 12px; }
+    .soft.blue { background: var(--blue-soft); }
+    .soft.green { background: var(--green-soft); }
+    .soft.amber { background: var(--amber-soft); }
+
+    .lead {
+      font-size: 22px;
+      line-height: 1.55;
+      font-weight: 760;
+    }
+
+    .accent { color: var(--green); font-weight: 800; }
+
+    .numbers {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    .number-box {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.72);
+      padding: 14px 14px 12px;
+    }
+
+    .number-box .n {
+      font-size: 33px;
+      line-height: 1;
+      font-weight: 900;
+      color: var(--green);
+      margin-bottom: 8px;
+    }
+
+    .number-box .t {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .chip {
+      padding: 9px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(31, 109, 82, 0.16);
+      background: rgba(31, 109, 82, 0.08);
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.62);
+      padding: 13px 14px 12px;
+    }
+
+    .metric .k {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .metric .v {
+      font-size: 24px;
+      line-height: 1.08;
+      font-weight: 850;
+      color: var(--green);
+    }
+
+    .metric .v.small {
+      font-size: 18px;
+      color: var(--ink);
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr 56px 1fr 56px 1fr;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .flow-box {
+      min-height: 110px;
+      padding: 16px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      background: rgba(255, 255, 255, 0.72);
+      font-size: 16px;
+      line-height: 1.6;
+      font-weight: 700;
+    }
+
+    .flow-box.green { background: var(--green-soft); }
+    .flow-box.amber { background: var(--amber-soft); }
+    .arrow {
+      text-align: center;
+      font-size: 30px;
+      font-weight: 900;
+      color: var(--muted);
+    }
+
+    ul.clean {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 15px;
+      line-height: 1.72;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    .table th, .table td {
+      border: 1px solid rgba(29, 43, 36, 0.1);
+      padding: 10px 9px;
+      vertical-align: middle;
+      text-align: center;
+    }
+
+    .table th {
+      background: rgba(31, 109, 82, 0.08);
+      color: var(--green);
+      font-weight: 800;
+    }
+
+    .table td.left {
+      text-align: left;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.58);
+    }
+
+    .callout {
+      border-left: 4px solid var(--amber);
+      padding-left: 12px;
+      font-size: 15px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+
+    .footer {
+      position: absolute;
+      left: 34px;
+      right: 34px;
+      bottom: 18px;
+      z-index: 2;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .nav {
+      position: fixed;
+      right: 16px;
+      bottom: 14px;
+      z-index: 10;
+      border: 1px solid rgba(29, 43, 36, 0.12);
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(8px);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 7px 11px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="deck">
+    <section class="slide active">
+      <div class="frame">
+        <div class="header">
+          <div class="eyebrow">TransDSSAT</div>
+          <div class="page">01 / 07</div>
+        </div>
+        <h1>TransDSSAT 已完成工作汇报</h1>
+        <p class="subtitle">当前系统已经形成从场景构建、逐步决策执行、仿真评估到训练前验证的完整准备链路。</p>
+        <div class="content hero">
+          <div class="stack">
+            <div class="card strong">
+              <div class="lead">当前已经形成一条可运行的闭环：<span class="accent">场景定义 -> 逐步决策接口 -> 仿真执行 -> 统一评估 -> 训练前准备</span>。</div>
+            </div>
+            <div class="numbers">
+              <div class="number-box">
+                <div class="n">10,000</div>
+                <div class="t">可稳定生成的训练场景池规模</div>
+              </div>
+              <div class="number-box">
+                <div class="n">2</div>
+                <div class="t">连续控制维度：灌溉与施氮</div>
+              </div>
+              <div class="number-box">
+                <div class="n">1</div>
+                <div class="t">已校准并可映射到 DSSAT 的玉米品种：登海605</div>
+              </div>
+              <div class="number-box">
+                <div class="n">本地</div>
+                <div class="t">已完成训练前验证，尚未启动显卡训练</div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>当前阶段完成情况</h3>
+              <ul class="clean">
+                <li>逐步决策执行链路已经打通。</li>
+                <li>训练场景池、评测接口、DSSAT 映射和基础验证已经就位。</li>
+                <li>项目已完成训练前准备，等待显卡资源可用后启动正式训练。</li>
+              </ul>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card strong">
+              <h3>当前完成面的结构</h3>
+              <div class="flow">
+                <div class="flow-box green">场景结构<br>与作物品种信息</div>
+                <div class="arrow">→</div>
+                <div class="flow-box amber">逐步连续控制<br>环境与策略接口</div>
+                <div class="arrow">→</div>
+                <div class="flow-box green">统一评估兼容<br>与训练前验证</div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>当前成果范围</h3>
+              <ul class="clean">
+                <li>已完成训练前的数据、接口、映射、评估与验证准备。</li>
+                <li>尚未启动正式显卡训练，也尚未产出新的训练结果。</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>TransDSSAT 自动化整理 | 2026-05-27</span>
+          <span>第 1 页</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="frame">
+        <div class="header">
+          <div class="eyebrow">场景层</div>
+          <div class="page">02 / 07</div>
+        </div>
+        <h2>训练与评测所需的场景表达已经完整成形</h2>
+        <p class="subtitle">当前场景不仅包含天气和预算，还能统一表达作物、品种、目标、决策方式和初始土壤状态。</p>
+        <div class="content grid-2">
+          <div class="stack">
+            <div class="card strong">
+              <h3>场景记录中已经显式包含</h3>
+              <div class="chips">
+                <span class="chip">作物信息</span>
+                <span class="chip">品种标识</span>
+                <span class="chip">目标设定</span>
+                <span class="chip">决策设定</span>
+                <span class="chip">天气年份</span>
+                <span class="chip">土壤类型</span>
+                <span class="chip">播种日期</span>
+                <span class="chip">预算档位</span>
+              </div>
+            </div>
+            <div class="card">
+              <h3>登海605品种信息已进入结构化记录</h3>
+              <table class="table">
+                <tr><th>项目</th><th>当前状态</th></tr>
+                <tr><td class="left">品种编号</td><td>denghai605</td></tr>
+                <tr><td class="left">参数名称</td><td>P1 / P2 / P5 / G2 / G3 / PHINT</td></tr>
+                <tr><td class="left">参数数值</td><td>340.9 / 1.61 / 700 / 600 / 10.5 / 60.0</td></tr>
+                <tr><td class="left">DSSAT 对应关系</td><td>DH6051 / MZCER048.CUL / IB0001</td></tr>
+              </table>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <h3>已具备的能力</h3>
+              <ul class="clean">
+                <li>能够对同一作物进行跨天气年、跨土壤、跨播期、跨预算的多样化采样。</li>
+                <li>能够在场景导出时保留品种、目标、决策粒度和动作空间元数据。</li>
+                <li>能够让训练、评测与 DSSAT 输入使用同一套场景对象。</li>
+              </ul>
+            </div>
+            <div class="soft amber">
+              <div class="callout">当前已经具备可复用的场景结构，能够承载后续训练与统一评测所需的信息密度。</div>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>TransDSSAT 自动化整理 | 2026-05-27</span>
+          <span>第 2 页</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="frame">
+        <div class="header">
+          <div class="eyebrow">逐步决策接口</div>
+          <div class="page">03 / 07</div>
+        </div>
+        <h2>逐步决策接口已经可运行，且采用连续控制表达</h2>
+        <p class="subtitle">当前环境接口已经围绕每一步的连续控制量组织，而不是停留在离散动作表的实验形态。</p>
+        <div class="content grid-2">
+          <div class="stack">
+            <div class="card strong">
+              <h3>当前逐步决策的动作内容</h3>
+              <div class="metric-grid">
+                <div class="metric">
+                  <div class="k">动作维度 1</div>
+                  <div class="v">灌溉量</div>
+                </div>
+                <div class="metric">
+                  <div class="k">动作维度 2</div>
+                  <div class="v">施氮量</div>
+                </div>
+                <div class="metric">
+                  <div class="k">环境反馈</div>
+                  <div class="v small">剩余预算、当前状态、即时回报</div>
+                </div>
+                <div class="metric">
+                  <div class="k">约束表达</div>
+                  <div class="v small">当前步骤下的动作约束</div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>已具备的执行能力</h3>
+              <ul class="clean">
+                <li>环境可以逐步接收灌溉量和施氮量，并更新剩余预算。</li>
+                <li>每一步都能返回当前状态、即时回报和动作约束。</li>
+                <li>测试集导出时已经携带连续控制范围与动作约束规则。</li>
+              </ul>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <h3>原生逐步决策策略接口已具备</h3>
+              <ul class="clean">
+                <li>已经定义逐步决策策略的统一接口与执行回路。</li>
+                <li>已经提供原生逐步决策的参考策略族，用于基线对照和参考执行。</li>
+                <li>在逐步决策模式下，简单策略优先走原生逐步执行路径。</li>
+              </ul>
+            </div>
+            <div class="soft blue">
+              <div class="callout">原生逐步执行接口已经打通，但尚未启动显卡训练来学习新的决策策略。</div>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>TransDSSAT 自动化整理 | 2026-05-27</span>
+          <span>第 3 页</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="frame">
+        <div class="header">
+          <div class="eyebrow">DSSAT 就绪情况</div>
+          <div class="page">04 / 07</div>
+        </div>
+        <h2>登海605与 DSSAT 的映射已经验证并可渲染输入</h2>
+        <p class="subtitle">系统已经把关键品种参数和 DSSAT 输入模板接入实际执行链路。</p>
+        <div class="content grid-2">
+          <div class="stack">
+            <div class="card strong">
+              <h3>已完成的 DSSAT 侧工作</h3>
+              <ul class="clean">
+                <li>确认玉米系数文件的参数顺序与登海605记录一致。</li>
+                <li>在场景层保留登海605的 DSSAT 对应关系。</li>
+                <li>输入渲染脚本已支持为运行目录生成本地品种覆盖文件。</li>
+                <li>实验文件中的品种配置已可自动替换为登海605对应条目。</li>
+              </ul>
+            </div>
+            <div class="soft green">
+              <div class="callout">针对登海605的 DSSAT 输入渲染已通过单元测试，并完成过一次远程本地试运行，能够产出结果文件。</div>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <h3>当前已具备的实际能力</h3>
+              <ul class="clean">
+                <li>后续不需要再把品种参数手工抄入 DSSAT 模板。</li>
+                <li>训练与评测场景和 DSSAT 输入之间已经形成自动化桥接。</li>
+                <li>未来进行 DSSAT 批量验证时，关键品种映射已经具备执行基础。</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>当前完成状态</h3>
+              <div class="lead">目前玉米品种“登海605”已经具备<span class="accent">结构化参数记录、DSSAT 映射和输入渲染能力</span>。</div>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>TransDSSAT 自动化整理 | 2026-05-27</span>
+          <span>第 4 页</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="frame">
+        <div class="header">
+          <div class="eyebrow">场景池</div>
+          <div class="page">05 / 07</div>
+        </div>
+        <h2>训练场景池已经能够稳定生成 10,000 个有效且多样化的样本</h2>
+        <p class="subtitle">当前不仅达到规模要求，也已经把多维覆盖和重复性检查纳入场景池生成流程。</p>
+        <div class="content grid-2">
+          <div class="stack">
+            <div class="card strong">
+              <h3>当前场景池配置</h3>
+              <div class="numbers">
+                <div class="number-box"><div class="n">9000</div><div class="t">训练集</div></div>
+                <div class="number-box"><div class="n">500</div><div class="t">验证集</div></div>
+                <div class="number-box"><div class="n">500</div><div class="t">测试集</div></div>
+                <div class="number-box"><div class="n">10000</div><div class="t">总量</div></div>
+              </div>
+            </div>
+            <div class="card">
+              <h3>已确认的覆盖维度</h3>
+              <table class="table">
+                <tr><th>维度</th><th>当前覆盖</th></tr>
+                <tr><td class="left">天气类型</td><td>3</td></tr>
+                <tr><td class="left">天气年份</td><td>10</td></tr>
+                <tr><td class="left">土壤类型</td><td>5</td></tr>
+                <tr><td class="left">目标设定</td><td>4</td></tr>
+              </table>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <h3>多样性与有效性检查已内置</h3>
+              <ul class="clean">
+                <li>能够输出场景池覆盖摘要，直接看到覆盖面。</li>
+                <li>能够检查记录数、字段完整性、覆盖下限与重复样本。</li>
+                <li>能够显式检查跨维度重复，避免大量近似重复样本混入。</li>
+              </ul>
+            </div>
+            <div class="soft amber">
+              <div class="callout">当前已经拥有可直接用于泛化训练的场景池工程骨架。</div>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>TransDSSAT 自动化整理 | 2026-05-27</span>
+          <span>第 5 页</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="frame">
+        <div class="header">
+          <div class="eyebrow">评估与验证</div>
+          <div class="page">06 / 07</div>
+        </div>
+        <h2>统一评估兼容链路和训练前本地验证已经完成</h2>
+        <p class="subtitle">系统不仅能够运行环境，也能够把不同策略路径纳入同一评估框架，并已完成训练前一致性检查。</p>
+        <div class="content grid-2">
+          <div class="stack">
+            <div class="card strong">
+              <h3>统一评估当前已经支持</h3>
+              <ul class="clean">
+                <li>统一评估已支持逐步决策粒度。</li>
+                <li>当策略本身就是原生逐步策略时，评估优先执行原生闭环。</li>
+                <li>旧有整季策略仍可通过兼容层进入逐步评估链路。</li>
+                <li>评估记录中能够区分实际执行路径与兼容投影情况。</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h3>已经完成的训练前本地验证</h3>
+              <div class="chips">
+                <span class="chip">代码编译检查</span>
+                <span class="chip">单元测试汇总执行</span>
+                <span class="chip">逐步环境测试</span>
+                <span class="chip">兼容层测试</span>
+                <span class="chip">逐步评估测试</span>
+                <span class="chip">DSSAT 输入渲染测试</span>
+                <span class="chip">本地仿真试运行</span>
+              </div>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <h3>当前验证结果</h3>
+              <ul class="clean">
+                <li>逐步决策接口没有打断既有评测协议。</li>
+                <li>兼容层仍在，可以承接历史整季策略资产。</li>
+                <li>当前代码基线已经完成一轮训练前的本地静态与动态检查。</li>
+              </ul>
+            </div>
+            <div class="soft blue">
+              <div class="callout">软件接口和验证层面已经达到可以进入显卡训练准备阶段的状态。</div>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>TransDSSAT 自动化整理 | 2026-05-27</span>
+          <span>第 6 页</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="frame">
+        <div class="header">
+          <div class="eyebrow">当前状态与下一步</div>
+          <div class="page">07 / 07</div>
+        </div>
+        <h2>当前项目位置：训练前准备已完成，等待显卡可用后进入正式训练</h2>
+        <p class="subtitle">当前已完成训练前准备，下一阶段工作将围绕显卡资源可用后的正式训练启动展开。</p>
+        <div class="content grid-2">
+          <div class="stack">
+            <div class="card strong">
+              <h3>已完成事项</h3>
+              <ul class="clean">
+                <li>场景结构、作物品种信息、目标设定和决策设定已经统一。</li>
+                <li>登海605的结构化参数和 DSSAT 映射已经可执行。</li>
+                <li>逐步连续控制接口、原生策略接口和统一评估兼容链路已经贯通。</li>
+                <li>10,000 规模训练场景池和多样性校验已经具备。</li>
+                <li>训练前所需的本地基础验证已经完成。</li>
+              </ul>
+            </div>
+            <div class="soft amber">
+              <h3>未完成事项</h3>
+              <ul class="clean">
+                <li>尚未启动正式显卡训练。</li>
+                <li>尚未产出新的训练结果。</li>
+                <li>训练启动前仍需远程检查显卡空闲情况。</li>
+              </ul>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="card">
+              <h3>阶段结论</h3>
+              <div class="lead">当前 TransDSSAT 已经完成了<span class="accent">训练前的数据、接口、映射、评测和验证准备</span>，具备在显卡条件满足后进入正式训练阶段的前置基础。</div>
+            </div>
+            <div class="card">
+              <h3>下一阶段工作</h3>
+              <ul class="clean">
+                <li>在远程服务器确认显卡空闲后，进入正式训练启动。</li>
+                <li>如果显卡暂时不可用，继续进行本地补充验证与文档完善。</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="footer">
+          <span>TransDSSAT 自动化整理 | 2026-05-27</span>
+          <span>第 7 页</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="nav">左右方向键 / 空格</div>
+
+  <script>
+    const slides = Array.from(document.querySelectorAll(".slide"));
+    let index = 0;
+
+    function showSlide(nextIndex) {
+      index = (nextIndex + slides.length) % slides.length;
+      slides.forEach((slide, idx) => {
+        slide.classList.toggle("active", idx === index);
+      });
+    }
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight" || event.key === " " || event.key === "PageDown") {
+        event.preventDefault();
+        showSlide(index + 1);
+      }
+      if (event.key === "ArrowLeft" || event.key === "PageUp") {
+        event.preventDefault();
+        showSlide(index - 1);
+      }
+      if (event.key === "Home") {
+        event.preventDefault();
+        showSlide(0);
+      }
+      if (event.key === "End") {
+        event.preventDefault();
+        showSlide(slides.length - 1);
+      }
+    });
+
+    window.addEventListener("click", () => showSlide(index + 1));
+  </script>
+</body>
+</html>

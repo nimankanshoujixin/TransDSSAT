@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 
 from transdssat.domain import Trajectory
-from transdssat.scenarios import SimulationScenario
+from transdssat.scenarios import SimulationScenario, scenario_yield_floor_reference
 
 
 def _clip(value: float, lower: float = 0.0, upper: float = 100.0) -> float:
@@ -23,6 +23,16 @@ def _centered_score(delta_pct: float, span_pct: float = 20.0) -> float:
 def _stress_score(candidate: float, baseline: float, span: float = 0.30) -> float:
     delta = baseline - candidate
     return round(_clip(50.0 + 50.0 * (delta / span)), 3)
+
+
+def _mean(values: list[float], digits: int = 6) -> float:
+    if not values:
+        return 0.0
+    return round(sum(values) / len(values), digits)
+
+
+def _environmental_metric(trajectory: Trajectory, metric_id: str) -> float:
+    return float(trajectory.outcome.environmental_metrics.get(metric_id, 0.0))
 
 
 def average_water_stress(trajectory: Trajectory) -> float:
@@ -54,7 +64,16 @@ class PolicyScorecard:
     avg_nitrogen_stress: float
     reward: float
     reward_gain: float
+    yield_floor_reference_kg_ha: float
+    yield_floor_gap_ratio: float
+    yield_floor_attainment_pct: float
+    irrigation_budget_violation_ratio: float
+    nitrogen_budget_violation_ratio: float
     budget_adherence_score: float
+    total_drainage_mm: float
+    total_nitrogen_leached_kg_ha: float
+    terminal_root_zone_water_mm: float
+    terminal_soil_nitrogen_kg_ha: float
     production_score: float
     efficiency_score: float
     stress_score: float
@@ -87,15 +106,18 @@ def score_trajectory(
         baseline_outcome.nitrogen_use_efficiency,
     )
     reward_gain = candidate_outcome.cumulative_reward - baseline_outcome.cumulative_reward
+    yield_floor_reference = scenario_yield_floor_reference(scenario)
+    yield_floor_gap_ratio = max(0.0, yield_floor_reference - candidate_outcome.yield_kg_ha) / max(1.0, yield_floor_reference)
+    yield_floor_attainment_pct = min(candidate_outcome.yield_kg_ha / max(1.0, yield_floor_reference), 1.0) * 100.0
 
-    irrigation_error = abs(candidate_outcome.total_irrigation_mm - scenario.irrigation_budget_mm) / max(
+    irrigation_violation_ratio = max(0.0, candidate_outcome.total_irrigation_mm - scenario.irrigation_budget_mm) / max(
         1.0, scenario.irrigation_budget_mm
     )
-    nitrogen_error = abs(candidate_outcome.total_nitrogen_kg_ha - scenario.nitrogen_budget_kg_ha) / max(
+    nitrogen_violation_ratio = max(0.0, candidate_outcome.total_nitrogen_kg_ha - scenario.nitrogen_budget_kg_ha) / max(
         1.0, scenario.nitrogen_budget_kg_ha
     )
     budget_adherence_score = round(
-        _clip(100.0 - 50.0 * (irrigation_error + nitrogen_error)),
+        _clip(100.0 - 50.0 * (irrigation_violation_ratio + nitrogen_violation_ratio)),
         3,
     )
 
@@ -142,7 +164,16 @@ def score_trajectory(
         avg_nitrogen_stress=candidate_n_stress,
         reward=round(candidate_outcome.cumulative_reward, 6),
         reward_gain=round(reward_gain, 6),
+        yield_floor_reference_kg_ha=round(yield_floor_reference, 3),
+        yield_floor_gap_ratio=round(yield_floor_gap_ratio, 6),
+        yield_floor_attainment_pct=round(yield_floor_attainment_pct, 3),
+        irrigation_budget_violation_ratio=round(irrigation_violation_ratio, 6),
+        nitrogen_budget_violation_ratio=round(nitrogen_violation_ratio, 6),
         budget_adherence_score=budget_adherence_score,
+        total_drainage_mm=round(_environmental_metric(candidate, "total_drainage_mm"), 6),
+        total_nitrogen_leached_kg_ha=round(_environmental_metric(candidate, "total_nitrogen_leached_kg_ha"), 6),
+        terminal_root_zone_water_mm=round(_environmental_metric(candidate, "terminal_root_zone_water_mm"), 6),
+        terminal_soil_nitrogen_kg_ha=round(_environmental_metric(candidate, "terminal_soil_nitrogen_kg_ha"), 6),
         production_score=production_score,
         efficiency_score=efficiency_score,
         stress_score=stress_score,
@@ -160,28 +191,61 @@ def summarize_scorecards(scorecards: list[PolicyScorecard]) -> dict:
             "mean_reward_gain": 0.0,
             "mean_yield_kg_ha": 0.0,
             "mean_yield_gain_pct": 0.0,
+            "mean_yield_floor_reference_kg_ha": 0.0,
+            "mean_yield_floor_gap_ratio": 0.0,
+            "mean_yield_floor_attainment_pct": 0.0,
             "mean_irrigation_mm": 0.0,
             "mean_nitrogen_kg_ha": 0.0,
+            "mean_irrigation_budget_violation_ratio": 0.0,
+            "mean_nitrogen_budget_violation_ratio": 0.0,
             "mean_water_use_efficiency": 0.0,
             "mean_nitrogen_use_efficiency": 0.0,
             "mean_budget_adherence_score": 0.0,
             "mean_avg_water_stress": 0.0,
             "mean_avg_nitrogen_stress": 0.0,
+            "mean_total_drainage_mm": 0.0,
+            "mean_total_nitrogen_leached_kg_ha": 0.0,
+            "mean_terminal_root_zone_water_mm": 0.0,
+            "mean_terminal_soil_nitrogen_kg_ha": 0.0,
         }
 
     count = len(scorecards)
     return {
         "scenario_count": count,
-        "mean_total_score_100": round(sum(card.total_score_100 for card in scorecards) / count, 3),
-        "mean_reward": round(sum(card.reward for card in scorecards) / count, 6),
-        "mean_reward_gain": round(sum(card.reward_gain for card in scorecards) / count, 6),
-        "mean_yield_kg_ha": round(sum(card.yield_kg_ha for card in scorecards) / count, 3),
-        "mean_yield_gain_pct": round(sum(card.yield_gain_pct for card in scorecards) / count, 3),
-        "mean_irrigation_mm": round(sum(card.irrigation_mm for card in scorecards) / count, 3),
-        "mean_nitrogen_kg_ha": round(sum(card.nitrogen_kg_ha for card in scorecards) / count, 3),
-        "mean_water_use_efficiency": round(sum(card.water_use_efficiency for card in scorecards) / count, 5),
-        "mean_nitrogen_use_efficiency": round(sum(card.nitrogen_use_efficiency for card in scorecards) / count, 5),
-        "mean_budget_adherence_score": round(sum(card.budget_adherence_score for card in scorecards) / count, 3),
-        "mean_avg_water_stress": round(sum(card.avg_water_stress for card in scorecards) / count, 6),
-        "mean_avg_nitrogen_stress": round(sum(card.avg_nitrogen_stress for card in scorecards) / count, 6),
+        "mean_total_score_100": _mean([card.total_score_100 for card in scorecards], digits=3),
+        "mean_reward": _mean([card.reward for card in scorecards], digits=6),
+        "mean_reward_gain": _mean([card.reward_gain for card in scorecards], digits=6),
+        "mean_yield_kg_ha": _mean([card.yield_kg_ha for card in scorecards], digits=3),
+        "mean_yield_gain_pct": _mean([card.yield_gain_pct for card in scorecards], digits=3),
+        "mean_yield_floor_reference_kg_ha": _mean([card.yield_floor_reference_kg_ha for card in scorecards], digits=3),
+        "mean_yield_floor_gap_ratio": _mean([card.yield_floor_gap_ratio for card in scorecards], digits=6),
+        "mean_yield_floor_attainment_pct": _mean([card.yield_floor_attainment_pct for card in scorecards], digits=3),
+        "mean_irrigation_mm": _mean([card.irrigation_mm for card in scorecards], digits=3),
+        "mean_nitrogen_kg_ha": _mean([card.nitrogen_kg_ha for card in scorecards], digits=3),
+        "mean_irrigation_budget_violation_ratio": _mean(
+            [card.irrigation_budget_violation_ratio for card in scorecards],
+            digits=6,
+        ),
+        "mean_nitrogen_budget_violation_ratio": _mean(
+            [card.nitrogen_budget_violation_ratio for card in scorecards],
+            digits=6,
+        ),
+        "mean_water_use_efficiency": _mean([card.water_use_efficiency for card in scorecards], digits=5),
+        "mean_nitrogen_use_efficiency": _mean([card.nitrogen_use_efficiency for card in scorecards], digits=5),
+        "mean_budget_adherence_score": _mean([card.budget_adherence_score for card in scorecards], digits=3),
+        "mean_avg_water_stress": _mean([card.avg_water_stress for card in scorecards], digits=6),
+        "mean_avg_nitrogen_stress": _mean([card.avg_nitrogen_stress for card in scorecards], digits=6),
+        "mean_total_drainage_mm": _mean([card.total_drainage_mm for card in scorecards], digits=6),
+        "mean_total_nitrogen_leached_kg_ha": _mean(
+            [card.total_nitrogen_leached_kg_ha for card in scorecards],
+            digits=6,
+        ),
+        "mean_terminal_root_zone_water_mm": _mean(
+            [card.terminal_root_zone_water_mm for card in scorecards],
+            digits=6,
+        ),
+        "mean_terminal_soil_nitrogen_kg_ha": _mean(
+            [card.terminal_soil_nitrogen_kg_ha for card in scorecards],
+            digits=6,
+        ),
     }

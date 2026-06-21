@@ -38,6 +38,22 @@ def _first_present_float(row: dict[str, str], keys: tuple[str, ...]) -> float | 
     return None
 
 
+def _phenology_float(value: str | None) -> float | None:
+    parsed = _to_float(value)
+    if not _is_missing(parsed):
+        return parsed
+    if value is None:
+        return None
+    match = re.search(r"\d{3,7}", str(value))
+    if match is None:
+        return None
+    try:
+        parsed = float(match.group(0))
+    except ValueError:
+        return None
+    return None if _is_missing(parsed) else parsed
+
+
 @dataclass(slots=True)
 class ParsedDSSATOutputs:
     daily_states: list[CropState]
@@ -52,6 +68,7 @@ class DSSATOutputParser:
         plant_rows = self.parse_table(run_dir / "PlantGro.OUT", run_number=run_number)
         soil_water_rows = self.parse_table(run_dir / "SoilWat.OUT", run_number=run_number)
         soil_n_rows = self.parse_table(run_dir / "SoilNi.OUT", run_number=run_number)
+        warning_messages = self.parse_warning_messages(run_dir / "WARNING.OUT", run_number=run_number)
 
         daily_states = self._build_daily_states(
             scenario=scenario,
@@ -64,6 +81,7 @@ class DSSATOutputParser:
             scenario,
             daily_states,
             plant_rows,
+            warning_messages,
             run_number=run_number,
         )
         avg_water_stress = round(
@@ -80,6 +98,30 @@ class DSSATOutputParser:
             avg_water_stress=avg_water_stress,
             avg_nitrogen_stress=avg_nitrogen_stress,
         )
+
+    def parse_warning_messages(self, path: Path, run_number: int | None = None) -> list[str]:
+        if not path.exists():
+            return []
+
+        messages: list[str] = []
+        current_run: int | None = None
+        has_run_sections = False
+        for raw_line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = raw_line.rstrip()
+            if not line:
+                continue
+            if line.startswith("*RUN"):
+                parsed_run = self._parse_run_header(line)
+                if parsed_run is not None:
+                    current_run = parsed_run
+                    has_run_sections = True
+                continue
+            if line.startswith("*") or line.startswith("!"):
+                continue
+            if run_number is not None and has_run_sections and current_run != run_number:
+                continue
+            messages.append(line.strip())
+        return messages
 
     def parse_table(
         self,
@@ -245,6 +287,7 @@ class DSSATOutputParser:
         scenario: SimulationScenario,
         states: list[CropState],
         plant_rows: list[dict[str, str]],
+        warning_messages: list[str],
         run_number: int,
     ) -> CropOutcome:
         summary = self._select_summary_row(summary_rows, run_number)
@@ -268,6 +311,7 @@ class DSSATOutputParser:
             irrigation = 0.0
         if nitrogen <= 0.0:
             nitrogen = 0.0
+        phenology = self._summary_phenology(summary)
         return CropOutcome(
             yield_kg_ha=round(yield_kg_ha, 3),
             biomass_kg_ha=round(biomass_kg_ha, 3),
@@ -276,6 +320,15 @@ class DSSATOutputParser:
             water_use_efficiency=input_use_efficiency(yield_kg_ha, irrigation),
             nitrogen_use_efficiency=input_use_efficiency(yield_kg_ha, nitrogen),
             cumulative_reward=0.0,
+            environmental_metrics={
+                "avg_water_stress": round(sum(state.water_stress for state in states) / max(1, len(states)), 6),
+                "avg_nitrogen_stress": round(sum(state.nitrogen_stress for state in states) / max(1, len(states)), 6),
+                "terminal_root_zone_water_mm": round(states[-1].root_zone_water_mm, 6),
+                "terminal_soil_nitrogen_kg_ha": round(states[-1].soil_nitrogen_kg_ha, 6),
+                "warning_messages": warning_messages,
+                "termination_reason": self._detect_termination_reason(warning_messages),
+                **phenology,
+            },
         )
 
     def _select_summary_row(self, summary_rows: list[dict[str, str]], run_number: int) -> dict[str, str]:
@@ -295,3 +348,23 @@ class DSSATOutputParser:
     ) -> float:
         value = _first_present_float(row, keys)
         return default if value is None else value
+
+    def _summary_phenology(self, row: dict[str, str]) -> dict[str, float]:
+        phenology: dict[str, float] = {}
+        for key in ("PDAT", "EDAT", "ADAT", "MDAT", "HDAT", "HYEAR"):
+            value = _phenology_float(row.get(key))
+            if value is not None:
+                phenology[key.lower()] = value
+        return phenology
+
+    def _detect_termination_reason(self, warning_messages: list[str]) -> str:
+        lowered = " | ".join(message.lower() for message in warning_messages)
+        if "days below" in lowered and "growth program terminated" in lowered:
+            return "cold_termination"
+        if "ipplnt" in lowered:
+            return "planting_input_invalid"
+        if "makefw" in lowered:
+            return "management_block_format_invalid"
+        if warning_messages:
+            return "warning_present"
+        return ""

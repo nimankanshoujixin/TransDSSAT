@@ -4,8 +4,16 @@ from dataclasses import dataclass
 
 from transdssat.domain import CropAction, Trajectory, TrajectoryStep
 from transdssat.dssat import DSSATOutputParser, DSSATRunner
-from transdssat.rewarding import RewardWeights, input_use_efficiency, reward_from_outcome
-from transdssat.scenarios import SimulationScenario
+from transdssat.rewarding import (
+    RewardWeights,
+    anti_collapse_preferences,
+    input_use_efficiency,
+    objective_reward_weights,
+    reward_from_outcome,
+    resource_settlement_preferences,
+    step_reward,
+)
+from transdssat.scenarios import SimulationScenario, scenario_yield_floor_reference
 from transdssat.season import SeasonPolicy
 
 
@@ -70,7 +78,7 @@ class OfficialDSSATEnvironment:
         parsed,
         weights: RewardWeights | None,
     ) -> Trajectory:
-        weights = weights or RewardWeights()
+        weights = weights or objective_reward_weights(scenario.objective_context.to_dict())
         action_map = policy.action_map()
         steps: list[TrajectoryStep] = []
         states = parsed.daily_states
@@ -78,17 +86,22 @@ class OfficialDSSATEnvironment:
             raise RuntimeError("Parsed DSSAT output did not contain enough daily states to build a trajectory.")
 
         total_reward = 0.0
+        operation_count = 0
         for index in range(len(states) - 1):
             state = states[index]
             next_state = states[index + 1]
             action = action_map.get(state.day_index, CropAction())
             biomass_gain = max(0.0, next_state.biomass_kg_ha - state.biomass_kg_ha)
-            reward = (
-                biomass_gain * weights.biomass_gain_weight
-                - action.irrigation_mm * weights.irrigation_cost
-                - action.nitrogen_kg_ha * weights.nitrogen_cost
-                - state.water_stress * weights.water_stress_cost
-                - state.nitrogen_stress * weights.nitrogen_stress_cost
+            step_operation_count = 1 if action.irrigation_mm > 0.0 or action.nitrogen_kg_ha > 0.0 else 0
+            operation_count += step_operation_count
+            reward = step_reward(
+                biomass_gain=biomass_gain,
+                irrigation_mm=action.irrigation_mm,
+                nitrogen_kg_ha=action.nitrogen_kg_ha,
+                water_stress=state.water_stress,
+                nitrogen_stress=state.nitrogen_stress,
+                operation_count=step_operation_count,
+                weights=weights,
             )
             done = index == len(states) - 2
             if done:
@@ -100,7 +113,12 @@ class OfficialDSSATEnvironment:
                     nitrogen_budget_kg_ha=scenario.nitrogen_budget_kg_ha,
                     avg_water_stress=parsed.avg_water_stress,
                     avg_nitrogen_stress=parsed.avg_nitrogen_stress,
+                    operation_count=operation_count,
+                    environmental_metrics=dict(parsed.outcome.environmental_metrics),
                     weights=weights,
+                    yield_floor_reference=scenario_yield_floor_reference(scenario),
+                    anti_collapse_guardrail=anti_collapse_preferences(scenario.objective_context.to_dict()),
+                    resource_settlement=resource_settlement_preferences(scenario.objective_context.to_dict()),
                 )
                 reward += terminal_reward
             total_reward += reward
@@ -121,6 +139,12 @@ class OfficialDSSATEnvironment:
             )
 
         parsed.outcome.cumulative_reward = round(total_reward, 6)
+        parsed.outcome.environmental_metrics = {
+            **dict(parsed.outcome.environmental_metrics),
+            "avg_water_stress": parsed.avg_water_stress,
+            "avg_nitrogen_stress": parsed.avg_nitrogen_stress,
+            "operation_count": float(operation_count),
+        }
 
         return Trajectory(
             scenario_id=scenario.scenario_id,

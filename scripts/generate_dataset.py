@@ -25,9 +25,9 @@ def main() -> int:
     )
     parser.add_argument(
         "--sampling-mode",
-        choices=("grid", "random"),
+        choices=("grid", "random", "realistic"),
         default="grid",
-        help="Use the legacy fixed grid or random scenario sampling.",
+        help="Use the legacy fixed grid, synthetic random sampling, or real-data-driven realistic sampling.",
     )
     parser.add_argument(
         "--engines",
