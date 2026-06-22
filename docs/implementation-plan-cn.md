@@ -343,3 +343,8 @@ DT 训练所需序列建议为：
 5. 最后映射回 official DSSAT
 
 的顺序推进。
+# 废弃说明（2026-06-21）
+
+本文件中关于 `proxy` 优先、`先 proxy 后 official DSSAT`、或用近似环境先完成主训练的表述，现已全部作废。
+
+当前只允许 official DSSAT 作为训练与评估主路线，规范以 [`/G:/TransDSSAT/docs/OFFICIAL_DSSAT_ONLY_POLICY_CN.md`](/G:/TransDSSAT/docs/OFFICIAL_DSSAT_ONLY_POLICY_CN.md) 为准。

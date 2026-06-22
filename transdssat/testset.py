@@ -260,7 +260,7 @@ def generate_general_random_test_set(
     train_count: int = 2000,
     val_count: int = 300,
     test_count: int = 500,
-    engines: tuple[str, ...] = ("dssat_proxy",),
+    engines: tuple[str, ...] = ("dssat_official",),
     crops_filter: tuple[str, ...] | None = None,
     sampling_mode: str = "random",
     seed: int = 20260519,
@@ -278,7 +278,7 @@ def generate_general_random_test_set(
             seed=seed,
             use_splicing=True,
         )
-        target_engine = engines[0] if engines else "dssat_proxy"
+        target_engine = engines[0] if engines else "dssat_official"
         scenarios = [
             replace(record.scenario, engine_name=target_engine)
             for record in training_bundle.records[:total]
@@ -382,7 +382,7 @@ def generate_training_scenario_pool(
     train_count: int = 9000,
     val_count: int = 500,
     test_count: int = 500,
-    engines: tuple[str, ...] = ("dssat_proxy",),
+    engines: tuple[str, ...] = ("dssat_official",),
     crops_filter: tuple[str, ...] | None = None,
     sampling_mode: str = "random",
     seed: int = 20260519,
@@ -476,7 +476,7 @@ def scenario_matches_constraints(record: TestScenarioRecord, constraints: dict[s
 def generate_literature_matched_slices(
     registry: PolicyRegistry,
     scenario_count_per_slice: int = 100,
-    engines: tuple[str, ...] = ("dssat_proxy",),
+    engines: tuple[str, ...] = ("dssat_official",),
     crops_filter: tuple[str, ...] | None = None,
     seed: int = 20260519,
 ) -> list[LiteratureMatchedSlice]:

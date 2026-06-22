@@ -18,8 +18,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Evaluate one season policy on the selected backend.")
     parser.add_argument(
         "--engine",
-        default="dssat_proxy",
-        help="One of: wofost_proxy, dssat_proxy, dssat_official",
+        choices=("dssat_official",),
+        default="dssat_official",
+        help="Evaluation backend. Official DSSAT only.",
     )
     parser.add_argument("--crop", default="wheat", help="Crop filter: wheat or maize")
     parser.add_argument("--weather-regime", default="normal", help="dry, normal, wet")

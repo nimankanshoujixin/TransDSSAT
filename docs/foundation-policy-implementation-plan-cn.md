@@ -406,3 +406,12 @@ history/context ablations
 - baseline/eval runner 对齐
 
 这样后续真正开始训练时，才不会把模型训练、DSSAT 接口、数据 schema、评测 protocol 全部绑在一起爆炸。
+# 废弃说明（2026-06-21）
+
+本文件中的任何 `proxy` / `lightweight simulator` / `先 proxy 后 official` 路线表述，现已失效。
+
+当前唯一有效路线以 [`/G:/TransDSSAT/docs/OFFICIAL_DSSAT_ONLY_POLICY_CN.md`](/G:/TransDSSAT/docs/OFFICIAL_DSSAT_ONLY_POLICY_CN.md) 为准：
+
+- 后续训练只允许 official DSSAT
+- 后续评估只允许 official DSSAT
+- 不再接受 proxy 作为主训练、主评估或中间替代路线

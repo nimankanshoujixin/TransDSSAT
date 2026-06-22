@@ -51,6 +51,17 @@ class RealDataSourceTests(unittest.TestCase):
         self.assertTrue(all(scenario.irrigation_budget_mm >= 300.0 for scenario in scenarios))
         self.assertTrue(all(scenario.nitrogen_budget_kg_ha >= 300.0 for scenario in scenarios))
 
+    def test_quzhou_scenario_defaults_now_point_to_official_dssat(self) -> None:
+        scenarios = build_quzhou_scenarios(
+            target_count=3,
+            crops_filter=("maize",),
+            sampling_mode="random",
+            seed=20260621,
+        )
+
+        self.assertEqual(len(scenarios), 3)
+        self.assertTrue(all(scenario.engine_name == "dssat_official" for scenario in scenarios))
+
     def test_realistic_maize_only_pool_has_maize_template(self) -> None:
         scenarios = build_quzhou_scenarios(
             target_count=4,

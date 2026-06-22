@@ -5,8 +5,10 @@ import unittest
 from unittest.mock import patch
 
 from transdssat.domain import CropAction, CropOutcome, CropState, Trajectory, TrajectoryStep
+from transdssat.dssat import InteractiveDSSATResetResult, InteractiveDSSATStepResult
 from transdssat.environments import StepwiseDecisionEnvironment
 from transdssat.environments.adapters import SeasonEvaluationResult
+from transdssat.environments.stepwise import resolve_official_backend_mode
 from transdssat.rewarding import anti_collapse_preferences, budget_penalty, reward_from_outcome, RewardWeights, resource_settlement_preferences
 from transdssat.scenarios import (
     build_quzhou_scenarios,
@@ -208,6 +210,111 @@ class StepwiseEnvironmentTests(unittest.TestCase):
             self.assertEqual(next_observation.state.day_index, scenario.decision_context.decision_interval_days)
             self.assertEqual(info["daily_trace"][0]["engine_info"]["engine_name"], "dssat_official")
             self.assertEqual(env.final_outcome().cumulative_reward, 12.0)
+
+    def test_official_backend_mode_defaults_to_season_replay_wrapper(self) -> None:
+        self.assertEqual(resolve_official_backend_mode("auto"), "season_replay_wrapper")
+
+    def test_official_backend_mode_rejects_interactive_before_implementation(self) -> None:
+        scenario = copy.deepcopy(self.scenario)
+        scenario.engine_name = "dssat_official"
+
+        with self.assertRaisesRegex(NotImplementedError, "requires an interactive transport"):
+            StepwiseDecisionEnvironment(scenario, official_backend_mode="interactive_patched")
+
+    def test_official_interactive_backend_uses_injected_transport(self) -> None:
+        scenario = copy.deepcopy(self.scenario)
+        scenario.engine_name = "dssat_official"
+
+        class FakeInteractiveTransport:
+            def __init__(self) -> None:
+                self.closed = False
+                self.reset_state = CropState(
+                    day_index=0,
+                    stage="vegetative",
+                    stage_index=1,
+                    soil_moisture=0.5,
+                    root_zone_water_mm=180.0,
+                    soil_nitrogen_kg_ha=120.0,
+                    canopy_cover=0.2,
+                    biomass_kg_ha=100.0,
+                    water_stress=0.1,
+                    nitrogen_stress=0.1,
+                    tmean_c=22.0,
+                    precipitation_mm=0.0,
+                    et0_mm=4.0,
+                    radiation_mj_m2=18.0,
+                )
+                self.next_state = CropState(
+                    day_index=scenario.decision_context.decision_interval_days,
+                    stage="vegetative",
+                    stage_index=1,
+                    soil_moisture=0.48,
+                    root_zone_water_mm=182.0,
+                    soil_nitrogen_kg_ha=116.0,
+                    canopy_cover=0.3,
+                    biomass_kg_ha=155.0,
+                    water_stress=0.08,
+                    nitrogen_stress=0.09,
+                    tmean_c=23.0,
+                    precipitation_mm=2.0,
+                    et0_mm=4.1,
+                    radiation_mj_m2=18.5,
+                )
+                self.outcome = CropOutcome(
+                    yield_kg_ha=7200.0,
+                    biomass_kg_ha=155.0,
+                    total_irrigation_mm=10.0,
+                    total_nitrogen_kg_ha=20.0,
+                    water_use_efficiency=0.0,
+                    nitrogen_use_efficiency=0.0,
+                    cumulative_reward=5.5,
+                    environmental_metrics={},
+                )
+
+            def start_session(self, scenario_arg):  # noqa: ANN001
+                self.closed = False
+                return InteractiveDSSATResetResult(
+                    state=self.reset_state,
+                    run_dir="/tmp/interactive-session",
+                    info={"scenario_id": scenario_arg.scenario_id},
+                )
+
+            def step_session(self, action, *, decision_interval_days):  # noqa: ANN001
+                del decision_interval_days
+                return InteractiveDSSATStepResult(
+                    next_state=self.next_state,
+                    reward=5.5,
+                    done=True,
+                    daily_trace=[
+                        {
+                            "day_index": self.next_state.day_index,
+                            "reward": 5.5,
+                            "done": True,
+                            "engine_info": {"engine_name": "dssat_official"},
+                        }
+                    ],
+                    final_outcome=self.outcome,
+                    run_dir="/tmp/interactive-session",
+                    info={"applied_action": action.to_dict()},
+                )
+
+            def close_session(self):
+                self.closed = True
+                return self.outcome
+
+        env = StepwiseDecisionEnvironment(
+            scenario,
+            official_backend_mode="interactive_patched",
+            official_interactive_transport=FakeInteractiveTransport(),
+        )
+        observation = env.reset()
+        self.assertEqual(observation.state.day_index, 0)
+        next_observation, reward, done, info = env.step({"irrigation_mm": 10.0, "nitrogen_kg_ha": 20.0})
+        self.assertTrue(done)
+        self.assertEqual(reward, 5.5)
+        self.assertEqual(next_observation.state.day_index, scenario.decision_context.decision_interval_days)
+        self.assertEqual(info["backend_mode"], "interactive_patched")
+        self.assertEqual(env.final_outcome().yield_kg_ha, 7200.0)
 
     def test_budget_penalty_treats_budget_as_upper_bound(self) -> None:
         weights = RewardWeights(contract_id="reward_v2")

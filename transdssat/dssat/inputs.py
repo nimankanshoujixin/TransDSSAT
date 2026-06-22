@@ -62,26 +62,7 @@ class DSSATInputBuilder:
             encoding="utf-8",
         )
         scenario_path.write_text(
-            json.dumps(
-                {
-                    "scenario_id": scenario.scenario_id,
-                    "engine_name": scenario.engine_name,
-                    "crop_name": scenario.crop_spec.crop_name,
-                    "planting_date": scenario.planting_date,
-                    "cultivar_code": scenario.cultivar_code,
-                    "cultivar_id": scenario.cultivar_id,
-                    "crop_context": scenario.crop_context.to_dict() if scenario.crop_context is not None else {},
-                    "objective_context": scenario.objective_context.to_dict(),
-                    "decision_context": scenario.decision_context.to_dict(),
-                    "state_interface_contract": scenario.state_interface_contract_dict(),
-                    "template_name": scenario.template_name,
-                    "experiment_file": scenario.experiment_file,
-                    "site_name": scenario.site_name,
-                    "season_length_days": scenario.crop_spec.season_length_days,
-                },
-                indent=2,
-                ensure_ascii=False,
-            ),
+            json.dumps(scenario.to_dict(), indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
         manifest = {

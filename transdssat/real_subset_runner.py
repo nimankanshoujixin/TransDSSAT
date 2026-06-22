@@ -199,7 +199,13 @@ def _validate_rice_cultivar_row(raw_line: str, cultivar_path: Path) -> list[str]
     return issues
 
 
-def _append_unique_lines(target_path: Path, append_path: Path) -> None:
+def _append_unique_lines(
+    target_path: Path,
+    append_path: Path,
+    *,
+    strict_validation: bool = True,
+    validation_warnings: list[str] | None = None,
+) -> None:
     base_lines = target_path.read_text(encoding="utf-8", errors="ignore").splitlines()
     append_lines = append_path.read_text(encoding="utf-8", errors="ignore").splitlines()
     existing = {line.rstrip() for line in base_lines}
@@ -218,10 +224,14 @@ def _append_unique_lines(target_path: Path, append_path: Path) -> None:
             continue
         validation_issues = _validate_rice_cultivar_row(stripped, target_path)
         if validation_issues:
-            raise ValueError(
+            message = (
                 f"Rice cultivar row {first_token} is incompatible with {target_path.name}: "
                 + "; ".join(validation_issues)
             )
+            if strict_validation:
+                raise ValueError(message)
+            if validation_warnings is not None:
+                validation_warnings.append(message)
         formatted = _format_rice_cultivar_row(stripped)
         if formatted in existing:
             continue
@@ -387,6 +397,7 @@ def _prepare_runtime_clone(
     _rewrite_dssat_profile(run_root / "DSSATPRO.L48", run_root)
     _rewrite_dssat_profile(run_root / "DSSATPRO.L48.bak", run_root)
 
+    validation_warnings: list[str] = []
     genotype_dir = run_root / "Genotype"
     genotype_dir.mkdir(parents=True, exist_ok=True)
     cultivar_target = genotype_dir / "RICER048.CUL"
@@ -395,7 +406,12 @@ def _prepare_runtime_clone(
         if not runtime_cultivar.exists():
             raise FileNotFoundError(f"Runtime cultivar file not found: {runtime_cultivar}")
         shutil.copy2(runtime_cultivar, cultivar_target)
-    _append_unique_lines(cultivar_target, Path(asset.genotype_append_file))
+    _append_unique_lines(
+        cultivar_target,
+        Path(asset.genotype_append_file),
+        strict_validation=False,
+        validation_warnings=validation_warnings,
+    )
 
     if asset.subset_id == "mx475_migrated":
         work_dir = run_root
@@ -481,6 +497,11 @@ def _prepare_runtime_clone(
         raise ValueError(f"Unsupported subset id: {asset.subset_id}")
 
     work_dir.mkdir(parents=True, exist_ok=True)
+    if validation_warnings:
+        (run_root / "transdssat_runtime_clone_warnings.json").write_text(
+            json.dumps({"warnings": validation_warnings}, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
     return run_root, work_dir, experiment_name
 
 

@@ -331,7 +331,7 @@ def build_real_subset_simulation_scenario(
     crop_context = build_cultivar_context(case.crop_name, case.treatment.cultivar_code, site_name="wuhu")
     scenario = SimulationScenario(
         scenario_id=f"{subset_id}-tr{treatment_no:02d}-real-subset",
-        engine_name="dssat_proxy",
+        engine_name="dssat_official",
         crop_spec=crop_spec,
         soil_profile=soil_profile,
         weather_regime=_weather_regime(weather),

@@ -32,8 +32,8 @@ def main() -> int:
     parser.add_argument(
         "--engines",
         nargs="+",
-        default=["wofost_proxy", "dssat_proxy"],
-        help="Backends to include, for example: wofost_proxy dssat_proxy dssat_official",
+        default=["dssat_official"],
+        help="Backends to include, for example: dssat_official",
     )
     parser.add_argument(
         "--crops",

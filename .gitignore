@@ -19,5 +19,15 @@ data/dssat_runs/
 *.out
 *.tmp
 
+/逐日数据.xlsx
+/土壤/
+/作物模型_20260616/
+/作物模型_20260616.zip
+/文档/
+/玉米模型/
+/research_notes/local_reference_materials/
+/docs/*.docx
+/docs/*.pdf
+
 .DS_Store
 Thumbs.db

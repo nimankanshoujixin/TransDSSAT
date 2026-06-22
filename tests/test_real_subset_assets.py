@@ -511,6 +511,39 @@ class RealSubsetAssetTests(unittest.TestCase):
         self.assertIn("G1=71.09 outside [50.0, 70.0]", issues)
         self.assertIn("THOT=35.0 outside [25.0, 34.0]", issues)
 
+    def test_append_unique_lines_can_downgrade_runtime_range_check_to_warning(self) -> None:
+        from transdssat.real_subset_runner import _append_unique_lines
+
+        runtime_cultivar = Path("artifacts/test_runtime_append_warning.CUL")
+        append_file = Path("artifacts/test_runtime_append_warning_append.CUL")
+        runtime_cultivar.write_text(
+            "\n".join(
+                [
+                    "999991 MINIMA               . DFAULT 150.0   5.0 150.0  11.0  50.0 .0150  0.70  55.0  25.0  12.0  10.0",
+                    "999992 MAXIMA               . DFAULT 800.0 300.0 850.0  13.0  70.0 .0300  1.30  90.0  34.0  18.0  20.0",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        append_file.write_text(
+            "IB2002 Meixiangzhan 2       . IB0001 724.9 97.04 416.0 11.69 71.09 .0170  1.17 57.46  35.0  15.0  15.0\n",
+            encoding="utf-8",
+        )
+
+        warnings: list[str] = []
+        _append_unique_lines(
+            runtime_cultivar,
+            append_file,
+            strict_validation=False,
+            validation_warnings=warnings,
+        )
+
+        text = runtime_cultivar.read_text(encoding="utf-8")
+        self.assertIn("IB2002", text)
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("G1=71.09 outside [50.0, 70.0]", warnings[0])
+
     def test_rewrite_dssat_profile_points_entries_to_run_root(self) -> None:
         profile = Path("artifacts/test_dssat_profile.L48")
         profile.write_text(

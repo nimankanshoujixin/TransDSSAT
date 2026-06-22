@@ -1,5 +1,11 @@
 # TransDSSAT
 
+Important route policy:
+
+- TransDSSAT now treats **official DSSAT as the only valid training and evaluation backend**
+- any older proxy-first workflow is obsolete and must not be used for future mainline work
+- historical files that mention proxy remain archival only and are not normative
+
 TransDSSAT is a crop-decision training scaffold built around one practical idea:
 
 - the model outputs season-level water and nitrogen actions,
@@ -7,10 +13,10 @@ TransDSSAT is a crop-decision training scaffold built around one practical idea:
 - the backend returns trajectory data and reward,
 - the resulting samples are used to train a decision model such as a Transformer.
 
-The repository supports two backend layers:
+The repository still contains some legacy proxy code for archival comparison and debugging, but the current mainline backend is:
 
-- `wofost_proxy` / `dssat_proxy`: local proxy environments for fast development
-- `dssat_official`: a server-side wrapper around the official DSSAT runtime
+- `dssat_official`: the only admissible training and evaluation backend
+- `interactive_patched`: the gym-DSSAT-style official DSSAT interaction path implemented on top of a copied patched runtime
 
 ## Current framework
 
@@ -20,10 +26,14 @@ The codebase is now organized around season-level decision evaluation instead of
   Builds Quzhou-style scenarios. It now supports both the legacy fixed grid and random scenario sampling with perturbed soil initials, planting dates, and continuous budget ranges.
 - `transdssat/season.py`
   Defines season policies, control-mode merging, and both heuristic and literature-informed baseline generators.
-- `transdssat/environments/proxy.py`
-  Contains local proxy simulators for rapid iteration.
 - `transdssat/environments/adapters.py`
   Contains the official DSSAT season backend wrapper.
+- `transdssat/dssat/interactive.py`
+  Implements the Python-side interactive transport/session contract for the patched official DSSAT runtime.
+- `transdssat/dssat/interactive_controller.py`
+  Bridges the Python environment loop to the patched DSSAT subprocess/file protocol.
+- `dssat_patch_overlay/`
+  Stores the repo-managed Fortran overlay files that are applied onto a copied DSSAT source tree before rebuilding the patched runtime.
 - `transdssat/dssat/inputs.py`
   Writes a per-run DSSAT workspace and season policy files.
 - `transdssat/dssat/runner.py`
@@ -83,26 +93,23 @@ Reward is computed from:
 - budget-deviation penalties for water and nitrogen
 - extra penalties for severe under-irrigation / oversupply behavior
 
-Proxy backends return the reward during the rollout.
+The official DSSAT path reconstructs daily states from output files, then computes the reward on top of parsed outputs. For the interactive patched path, step responses and terminal outcomes are also validated against archived DSSAT outputs.
 
-The official DSSAT backend reconstructs daily states from output files, then computes the same reward family on top of parsed outputs.
+## Repository scope
 
-## What can run immediately
+The git repository tracks:
 
-You can run the proxy path right now with plain Python.
+- TransDSSAT Python code
+- scripts, tests, and mainline docs
+- the repo-managed DSSAT patch overlay in `dssat_patch_overlay/`
 
-```bash
-python scripts/generate_dataset.py --output-dir data/generated --scenario-count 216
-python scripts/evaluate_season_policy.py --engine dssat_proxy --crop wheat --weather-regime normal
-```
+The git repository does **not** track:
 
-This produces:
+- the full DSSAT runtime or full DSSAT source checkout
+- copied remote runtimes such as `dssat-runtime-patched`
+- local raw reference assets such as `逐日数据.xlsx`, `土壤/`, and `作物模型_20260616/`
 
-- `train.jsonl`
-- `test.jsonl`
-- `metadata.json`
-
-The proxy path is the current zero-friction route for generating training data and validating the learning pipeline.
+Those local assets are used by default code paths, but they are treated as workstation-local inputs rather than repository source.
 
 ## Official DSSAT backend
 
@@ -202,16 +209,16 @@ The default dataset generation flow is:
 3. evaluate that policy on the selected backend
 4. export trajectory data into train/test JSONL files
 
-Command:
+Example command:
 
 ```bash
-python scripts/generate_dataset.py --output-dir data/generated --scenario-count 216 --engines wofost_proxy dssat_proxy
+python scripts/generate_dataset.py --output-dir data/generated_dssat --scenario-count 72 --engines dssat_official
 ```
 
-To move beyond the legacy 108-scenario grid, use random sampling:
+To move beyond the legacy grid, use random sampling:
 
 ```bash
-python scripts/generate_dataset.py --output-dir data/generated_random --scenario-count 400 --sampling-mode random --engines dssat_proxy
+python scripts/generate_dataset.py --output-dir data/generated_random --scenario-count 400 --sampling-mode random --engines dssat_official
 ```
 
 To generate literature-baseline trajectories instead of heuristic ones:
@@ -221,7 +228,7 @@ python scripts/generate_dataset.py \
   --output-dir data/generated_lit \
   --scenario-count 120 \
   --sampling-mode random \
-  --engines dssat_proxy \
+  --engines dssat_official \
   --baseline-name literature_ncp \
   --baseline-budget-source scenario
 ```
@@ -239,11 +246,11 @@ export DSSAT_RUN_COMMAND="/opt/dssat/dscsm048 A {experiment}"
 python scripts/evaluate_season_policy.py --engine dssat_official --crop wheat --weather-regime normal
 ```
 
-If the official backend is ready on the server:
+For interactive patched-runtime validation, use the dedicated smoke/validation scripts added under `scripts/`, especially:
 
-```bash
-python scripts/generate_dataset.py --output-dir data/generated_dssat --scenario-count 72 --engines dssat_official
-```
+- `scripts/smoke_interactive_dssat_session.py`
+- `scripts/validate_interactive_dssat_action_effect.py`
+- `scripts/run_interactive_dssat_action_validation_remote.sh`
 
 ## Transformer training
 

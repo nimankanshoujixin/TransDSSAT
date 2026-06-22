@@ -1,39 +1,617 @@
 # Current Automation State
 
 ## Last updated
-2026-06-21 20:58 Asia/Shanghai
+2026-06-22 15:01 Asia/Shanghai
 
 ## Mode
 Completed
 
 ## Task status
-The rollback verification is complete. The restored default code path reproduces the historical pre-collapse Transformer+PPO baseline regime, including `best_epoch = 5` and the same late-epoch zero-input collapse.
+The proxy-to-official DSSAT transition task is complete. Proxy remains deprecated and invalid for future TransDSSAT training and evaluation work. The official-DSSAT-only mainline, copied-runtime interactive patch path, and standard repo-path regression gate have all been verified. The thread is now waiting for a new Bootstrap task.
 
 ## What was verified this wakeup
 
-- the formal rerun artifact directory is complete:
-  - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/stepwise_ppo_rice_maize_training_data_precollapse_baseline_rerun_20260621_20260621_203650`
-  - files present:
-    - `metrics.json`
-    - `run.log`
-    - `stepwise_ppo_policy.pt`
-- `metrics.json` confirms:
-  - `best_epoch = 5`
-  - `selection_metric = yield_floor_gap`
-  - best `val/test mean_reward_gain = 1.594909 / 1.551148`
-  - best `val/test mean_yield_floor_gap_ratio = 0.412211 / 0.404294`
-- late-training collapse is also reproduced on the restored baseline:
-  - `epoch 20 val/test irrigation_mm = 0.0 / 0.0`
-  - `epoch 20 val/test nitrogen_kg_ha = 0.0 / 0.0`
-  - `epoch 20 val/test mean_reward_gain = -0.720261 / -0.876687`
+- the user explicitly rejected proxy as a valid route for future work
+- the repository needs a documentation-level reset so the governing docs stop recommending proxy-first execution
+- the user explicitly selected the gym-DSSAT-style route for official DSSAT interaction, rather than any fallback segmented proxy plan
+- the user explicitly required a side-by-side DSSAT validation rule:
+  - preserve the original vanilla DSSAT runtime
+  - patch only a copied DSSAT runtime
+  - validate patched correctness first on real-data runs by comparing outputs against vanilla DSSAT under identical inputs
+- the temporary proxy-diagnostic artifacts added in the previous wakeup were removed:
+  - `/G:/TransDSSAT/scripts/analyze_baseline_collapse.py`
+  - `/G:/TransDSSAT/docs/baseline-root-cause-analysis-2026-06-21-cn.md`
+- the first official-DSSAT gap audit was written:
+  - [`/G:/TransDSSAT/docs/official-dssat-gap-audit-2026-06-21-cn.md`](/G:/TransDSSAT/docs/official-dssat-gap-audit-2026-06-21-cn.md)
+- the most important structural gap recorded there is that step-wise PPO still depends on proxy-backed environment semantics instead of official DSSAT step-wise execution
+- the vanilla-vs-patched runtime validation spec was written:
+  - [`/G:/TransDSSAT/docs/dssat-runtime-validation-spec-2026-06-21-cn.md`](/G:/TransDSSAT/docs/dssat-runtime-validation-spec-2026-06-21-cn.md)
+- the main training entrypoints were tightened to official-only engine selection:
+  - [`/G:/TransDSSAT/scripts/train_stepwise_ppo.py`](/G:/TransDSSAT/scripts/train_stepwise_ppo.py)
+  - [`/G:/TransDSSAT/scripts/train_rl_transformer.py`](/G:/TransDSSAT/scripts/train_rl_transformer.py)
+- real-subset step-wise scenario materialization now uses `engine_name="dssat_official"`:
+  - [`/G:/TransDSSAT/transdssat/real_subset_stepwise_eval.py`](/G:/TransDSSAT/transdssat/real_subset_stepwise_eval.py)
+- DSSAT runtime config now has first-pass dual-runtime support for `vanilla` and `patched` roles:
+  - [`/G:/TransDSSAT/transdssat/dssat/config.py`](/G:/TransDSSAT/transdssat/dssat/config.py)
+  - [`/G:/TransDSSAT/transdssat/dssat/runner.py`](/G:/TransDSSAT/transdssat/dssat/runner.py)
+  - [`/G:/TransDSSAT/scripts/run_stepwise_ppo_remote.sh`](/G:/TransDSSAT/scripts/run_stepwise_ppo_remote.sh)
+- static validation passed for the first batch of code changes:
+  - `python -m compileall scripts\train_stepwise_ppo.py scripts\train_rl_transformer.py transdssat\dssat\config.py transdssat\dssat\runner.py transdssat\real_subset_stepwise_eval.py`
+- evaluation helper scripts and scenario-pool defaults were also tightened to official DSSAT:
+  - [`/G:/TransDSSAT/scripts/evaluate_season_policy.py`](/G:/TransDSSAT/scripts/evaluate_season_policy.py)
+  - [`/G:/TransDSSAT/scripts/evaluate_policy_report.py`](/G:/TransDSSAT/scripts/evaluate_policy_report.py)
+  - [`/G:/TransDSSAT/scripts/run_unified_evaluation.py`](/G:/TransDSSAT/scripts/run_unified_evaluation.py)
+  - [`/G:/TransDSSAT/transdssat/testset.py`](/G:/TransDSSAT/transdssat/testset.py)
+- static validation also passed for that second batch:
+  - `python -m compileall scripts\evaluate_season_policy.py scripts\evaluate_policy_report.py scripts\run_unified_evaluation.py transdssat\testset.py`
+- remaining `dssat_proxy` references are now concentrated in:
+  - explicit debug / legacy scripts such as `scripts/compare_stepwise_semantics.py` and `scripts/run_ablation_report.py`
+  - data-generation helpers such as `scripts/generate_dataset.py`
+  - the still-live proxy backend implementation in `transdssat/environments/proxy.py`
+  - scenario/back-end semantics that still need true interactive official DSSAT replacement in `transdssat/environments/stepwise.py`
+- a new real-data replay comparator now exists for vanilla-vs-patched DSSAT gating:
+  - [`/G:/TransDSSAT/scripts/compare_dssat_runtimes.py`](/G:/TransDSSAT/scripts/compare_dssat_runtimes.py)
+  - [`/G:/TransDSSAT/transdssat/dssat/validation.py`](/G:/TransDSSAT/transdssat/dssat/validation.py)
+- the comparator runs the same real-subset original-management replay on both runtimes and compares:
+  - `Summary.OUT`
+  - `PlantGro.OUT`
+  - `SoilWat.OUT`
+  - `SoilNi.OUT`
+  - `Evaluate.OUT`
+  - plus replay-level yield / anthesis / maturity / summary-row / evaluate-row equality
+- static validation passed for the comparator:
+  - `python -m compileall scripts\compare_dssat_runtimes.py transdssat\dssat\validation.py`
+  - `python scripts\compare_dssat_runtimes.py --help`
+- remote `patched` runtime copy was created at:
+  - `/fs/fast/u2021201693/lym/dssat-runtime-patched`
+- the first smoke comparator run succeeded on:
+  - `wuhu_rice_calibrated:11`
+- smoke result:
+  - `case_count = 1`
+  - `matched_case_count = 1`
+  - `all_cases_match = true`
+  - vanilla and patched matched on replay-level yield / anthesis / maturity and on parsed `Summary.OUT`, `PlantGro.OUT`, `SoilWat.OUT`, `SoilNi.OUT`, `Evaluate.OUT`
+- a real blocker in the runtime-clone path was identified and narrowed:
+  - real-subset cultivar append rows can exceed runtime min/max reference ranges slightly
+  - previous logic raised hard errors and prevented real-subset replay from starting
+  - `transdssat/real_subset_runner.py` now downgrades those range mismatches to recorded clone warnings instead of aborting the replay
+- a full remote comparator run was launched after the smoke pass:
+  - tmux window: `transdssat:compare-full`
+  - wrapper: `/tmp/transdssat_compare_full_20260621_221000.sh`
+  - artifact root: `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/dssat_runtime_compare_full_20260621_221000`
+- the full remote comparator run has now finished successfully:
+  - report: `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/dssat_runtime_compare_full_20260621_221000/dssat_runtime_comparison_report.json`
+  - summary:
+    - `case_count = 20`
+    - `matched_case_count = 20`
+    - `all_cases_match = true`
+    - `failing_cases = []`
+- this means the current copied `patched` runtime is parity-clean against `vanilla` on the default real-subset bundle before any interactive DSSAT modification
+- `transdssat/environments/stepwise.py` now exposes an explicit official backend mode entry:
+  - default: `season_replay_wrapper`
+  - future target: `interactive_patched`
+- current behavior is unchanged, but an explicit `interactive_patched` request now fails fast with a clear `NotImplementedError` instead of silently falling back to old semantics
+- targeted validation passed for the new backend-mode guard:
+  - `python -m unittest tests.test_stepwise_env.StepwiseEnvironmentTests.test_official_engine_uses_stepwise_replay_backend tests.test_stepwise_env.StepwiseEnvironmentTests.test_official_backend_mode_defaults_to_season_replay_wrapper tests.test_stepwise_env.StepwiseEnvironmentTests.test_official_backend_mode_rejects_interactive_before_implementation -v`
+  - `python -m compileall transdssat\environments\stepwise.py tests\test_stepwise_env.py`
+- the Python-side interactive official DSSAT skeleton now exists:
+  - [`/G:/TransDSSAT/transdssat/dssat/interactive.py`](/G:/TransDSSAT/transdssat/dssat/interactive.py)
+  - exports:
+    - `InteractiveDSSATResetResult`
+    - `InteractiveDSSATStepResult`
+    - `InteractiveDSSATTransport`
+    - `PatchedInteractiveDSSATSession`
+- `transdssat/environments/stepwise.py` now supports an injected `official_interactive_transport` and can execute the `interactive_patched` mode end-to-end when a transport is provided
+- fake-transport stepwise validation passed, proving the PPO-facing environment can already consume a real future interactive backend without further training-layer refactor:
+  - `python -m unittest tests.test_stepwise_env.StepwiseEnvironmentTests.test_official_interactive_backend_uses_injected_transport -v`
+  - `python -m compileall transdssat\dssat\interactive.py transdssat\dssat\__init__.py transdssat\environments\stepwise.py tests\test_stepwise_env.py`
+- the first real transport/control-channel scaffold now exists:
+  - file-protocol transport in [`/G:/TransDSSAT/transdssat/dssat/interactive.py`](/G:/TransDSSAT/transdssat/dssat/interactive.py)
+  - config/env plumbing in [`/G:/TransDSSAT/transdssat/dssat/config.py`](/G:/TransDSSAT/transdssat/dssat/config.py)
+- the current protocol contract is:
+  - `session_manifest.json`
+  - `session_ready.json`
+  - `step_request_XXXX.json`
+  - `step_response_XXXX.json`
+  - `close_request.json`
+  - `final_outcome.json`
+- `build_filesystem_interactive_transport_from_env(...)` now provides a direct construction path from `DSSAT_*` env vars plus a scenario into a configured patched-runtime transport
+- end-to-end local protocol tests passed:
+  - `python -m unittest tests.test_dssat_interactive tests.test_stepwise_env.StepwiseEnvironmentTests.test_official_interactive_backend_uses_injected_transport -v`
+  - `python -m compileall transdssat\dssat\config.py transdssat\dssat\interactive.py transdssat\dssat\__init__.py tests\test_dssat_interactive.py`
+- scenario serialization is now round-trippable for external controller use:
+  - `SimulationScenario.from_dict(...)` and related nested `from_dict(...)` helpers were added in [`/G:/TransDSSAT/transdssat/scenarios.py`](/G:/TransDSSAT/transdssat/scenarios.py)
+  - [`/G:/TransDSSAT/transdssat/dssat/inputs.py`](/G:/TransDSSAT/transdssat/dssat/inputs.py) now writes the full scenario payload instead of a lossy subset
+- the interactive session manifest now carries the full scenario payload plus controller polling metadata:
+  - [`/G:/TransDSSAT/transdssat/dssat/interactive.py`](/G:/TransDSSAT/transdssat/dssat/interactive.py)
+- the first real external controller-side bridge now exists for the file protocol:
+  - [`/G:/TransDSSAT/transdssat/dssat/interactive_controller.py`](/G:/TransDSSAT/transdssat/dssat/interactive_controller.py)
+  - [`/G:/TransDSSAT/scripts/run_interactive_dssat_controller.py`](/G:/TransDSSAT/scripts/run_interactive_dssat_controller.py)
+- important scope note:
+  - this new controller is a transitional official-DSSAT replay bridge, not yet the final Fortran-instrumented daily patched DSSAT loop
+  - it makes the process boundary, manifest contract, and step request/response loop real without reintroducing proxy
+- new local controller-loop validation passed:
+  - `python -m unittest tests.test_dssat_interactive_controller tests.test_dssat_interactive tests.test_stepwise_env.StepwiseEnvironmentTests.test_official_interactive_backend_uses_injected_transport -v`
+  - `python -m compileall transdssat\scenarios.py transdssat\dssat\inputs.py transdssat\dssat\interactive.py transdssat\dssat\interactive_controller.py transdssat\dssat\__init__.py scripts\run_interactive_dssat_controller.py tests\test_dssat_interactive_controller.py`
+- the finished full vanilla-vs-patched replay comparison is now frozen as a formal baseline doc:
+  - [`/G:/TransDSSAT/docs/dssat-runtime-parity-baseline-2026-06-21-cn.md`](/G:/TransDSSAT/docs/dssat-runtime-parity-baseline-2026-06-21-cn.md)
+- the remaining default scenario/data-generation entrypoints were tightened one step further to official-only:
+  - [`/G:/TransDSSAT/transdssat/scenarios.py`](/G:/TransDSSAT/transdssat/scenarios.py)
+  - [`/G:/TransDSSAT/scripts/generate_dataset.py`](/G:/TransDSSAT/scripts/generate_dataset.py)
+- a dedicated proxy quarantine audit now records which remaining proxy paths are legacy/debug only rather than current blockers:
+  - [`/G:/TransDSSAT/docs/proxy-footprint-quarantine-2026-06-21-cn.md`](/G:/TransDSSAT/docs/proxy-footprint-quarantine-2026-06-21-cn.md)
+- a regression test now locks `build_quzhou_scenarios(...)` default engine to `dssat_official`:
+  - [`/G:/TransDSSAT/tests/test_real_data_sources.py`](/G:/TransDSSAT/tests/test_real_data_sources.py)
+- completed a remote read-only source audit of the copied DSSAT source tree at:
+  - `/fs/fast/u2021201693/lym/dssat-csm-os-v4.8.5`
+- confirmed the real daily orchestration boundary for future patched interactive work:
+  - `CSM_Main/CSM.for:492-531` is the actual `DAY_LOOP` driving `RATE -> INTEGR -> OUTPUT`
+- confirmed the narrowest state-export boundary:
+  - `CSM_Main/LAND.for:294-304` already sits between `WEATHR(...)` and `MGMTOPS(...)`, which is the right place for `get_state -> wait_action`
+- confirmed the narrowest action-injection boundary:
+  - `Management/MgmtOps.for:216-237` and `253-258` already centralize same-day irrigation / fertilizer dispatch and are the right place to bypass automatic scheduling in interactive mode
+- confirmed `Management/IRRIG.for` and `Management/Fert_Place.for` should be treated as legacy automatic-management generators for vanilla mode, not the first communication layer for Python control
+- wrote a concrete file-level insertion audit for the patched runtime:
+  - [`/G:/TransDSSAT/docs/patched-dssat-fortran-insertion-audit-2026-06-22-cn.md`](/G:/TransDSSAT/docs/patched-dssat-fortran-insertion-audit-2026-06-22-cn.md)
+- the new audit narrows the first patched-runtime implementation target to:
+  - `CSM.for` for day-boundary blocking control
+  - `LAND.for` for state export and interactive gate
+  - `MgmtOps.for` for irrigation / nitrogen action injection
+- converted that file-level insertion audit into an explicit Python-to-patched-runtime protocol contract:
+  - [`/G:/TransDSSAT/docs/patched-dssat-interactive-protocol-contract-2026-06-22-cn.md`](/G:/TransDSSAT/docs/patched-dssat-interactive-protocol-contract-2026-06-22-cn.md)
+- the interactive file protocol now locks a first runtime-facing metadata block in `session_manifest.json`:
+  - `protocol_version = "patched-dssat-v1"`
+  - `backend_mode`
+  - `runtime_role`
+  - `action_channels = ["irrigation_mm", "nitrogen_kg_ha"]`
+  - `state_interface_contract`
+- the controller-side `session_ready.json` contract now mirrors that metadata so the future patched runtime can fail fast on wrong protocol/runtime wiring before the first step
+- the following files were aligned to that new contract:
+  - [`/G:/TransDSSAT/transdssat/dssat/interactive.py`](/G:/TransDSSAT/transdssat/dssat/interactive.py)
+  - [`/G:/TransDSSAT/transdssat/dssat/interactive_controller.py`](/G:/TransDSSAT/transdssat/dssat/interactive_controller.py)
+  - [`/G:/TransDSSAT/scripts/run_interactive_dssat_controller.py`](/G:/TransDSSAT/scripts/run_interactive_dssat_controller.py)
+  - [`/G:/TransDSSAT/tests/test_dssat_interactive.py`](/G:/TransDSSAT/tests/test_dssat_interactive.py)
+  - [`/G:/TransDSSAT/tests/test_dssat_interactive_controller.py`](/G:/TransDSSAT/tests/test_dssat_interactive_controller.py)
+- new local validation passed for the contract alignment:
+  - `python -m unittest tests.test_dssat_interactive tests.test_dssat_interactive_controller -v`
+  - `python -m compileall transdssat\dssat\interactive.py transdssat\dssat\interactive_controller.py transdssat\dssat\__init__.py scripts\run_interactive_dssat_controller.py tests\test_dssat_interactive.py tests\test_dssat_interactive_controller.py`
+- the interactive controller entrypoint is no longer hard-wired to replay bridge only:
+  - [`/G:/TransDSSAT/transdssat/dssat/interactive_controller.py`](/G:/TransDSSAT/transdssat/dssat/interactive_controller.py)
+  - [`/G:/TransDSSAT/scripts/run_interactive_dssat_controller.py`](/G:/TransDSSAT/scripts/run_interactive_dssat_controller.py)
+- the controller now validates the manifest-side runtime contract before launch:
+  - `protocol_version == "patched-dssat-v1"`
+  - `engine_name == "dssat_official"`
+  - `action_channels == ["irrigation_mm", "nitrogen_kg_ha"]`
+  - `backend_mode in {"interactive_patched", "season_replay_wrapper_external_controller"}`
+- a new patched-runtime subprocess driver now exists behind the same controller entrypoint:
+  - mode name: `patched_runtime_subprocess`
+  - selector: CLI `--driver-mode` or env `TRANSDSSAT_INTERACTIVE_DRIVER_MODE`
+  - current default remains `replay_bridge` until the copied runtime is actually patched
+- the new subprocess driver launches the DSSAT binary via the existing role-specific `DSSAT_*_RUN_COMMAND` and injects the runtime-facing contract through env vars:
+  - `DSSAT_INTERACTIVE_MODE=1`
+  - `DSSAT_INTERACTIVE_PROTOCOL_DIR`
+  - `DSSAT_INTERACTIVE_SESSION_MANIFEST`
+  - `DSSAT_INTERACTIVE_PROTOCOL_VERSION`
+  - `DSSAT_INTERACTIVE_ENGINE_NAME`
+  - `DSSAT_INTERACTIVE_BACKEND_MODE`
+  - `DSSAT_INTERACTIVE_RUNTIME_ROLE`
+  - `DSSAT_INTERACTIVE_RUN_DIR`
+  - `DSSAT_INTERACTIVE_CROP_NAME`
+  - `DSSAT_INTERACTIVE_ACTION_CHANNELS`
+  - `DSSAT_INTERACTIVE_DECISION_INTERVAL_DAYS`
+  - `DSSAT_INTERACTIVE_STATE_INTERFACE_CONTRACT_JSON`
+- this means the Python-side transport/controller boundary is now compatible with either:
+  - the existing replay bridge for local CPU-safe validation
+  - or a future real copied-runtime patched DSSAT process without changing PPO-facing code again
+- new local validation passed for the dual-driver controller path:
+  - `python -m unittest tests.test_dssat_interactive_controller tests.test_dssat_interactive tests.test_stepwise_env.StepwiseEnvironmentTests.test_official_interactive_backend_uses_injected_transport -v`
+  - `python -m compileall transdssat\dssat\interactive_controller.py scripts\run_interactive_dssat_controller.py tests\test_dssat_interactive_controller.py`
+- the subprocess env contract has now been tightened so the future Fortran patch can validate launch metadata without parsing the whole manifest first:
+  - `DSSAT_INTERACTIVE_ENGINE_NAME`
+  - `DSSAT_INTERACTIVE_RUN_DIR`
+  - `DSSAT_INTERACTIVE_CROP_NAME`
+  - `DSSAT_INTERACTIVE_DECISION_INTERVAL_DAYS`
+  - `DSSAT_INTERACTIVE_STATE_INTERFACE_CONTRACT_JSON`
+- the controller-side subprocess test now locks those additional env fields at the real process boundary:
+  - [`/G:/TransDSSAT/tests/test_dssat_interactive_controller.py`](/G:/TransDSSAT/tests/test_dssat_interactive_controller.py)
+- the protocol contract doc now records both the manifest contract and the mirrored env contract for patched-runtime implementation:
+  - [`/G:/TransDSSAT/docs/patched-dssat-interactive-protocol-contract-2026-06-22-cn.md`](/G:/TransDSSAT/docs/patched-dssat-interactive-protocol-contract-2026-06-22-cn.md)
+- new local validation passed for this env-contract tightening:
+  - `python -m unittest tests.test_dssat_interactive_controller tests.test_dssat_interactive -v`
+  - `python -m compileall transdssat\dssat\interactive_controller.py tests\test_dssat_interactive_controller.py`
+- added a reusable interactive subprocess smoke entrypoint:
+  - [`/G:/TransDSSAT/scripts/smoke_interactive_dssat_session.py`](/G:/TransDSSAT/scripts/smoke_interactive_dssat_session.py)
+- found and fixed a real launch-path contract bug in the interactive transport:
+  - the controller is launched with `cwd=<run_dir>`, so the previous relative launch command `python scripts/run_interactive_dssat_controller.py {session_manifest}` is invalid for real sessions
+  - [`/G:/TransDSSAT/transdssat/dssat/interactive.py`](/G:/TransDSSAT/transdssat/dssat/interactive.py) now exposes absolute launch placeholders:
+    - `{controller_script}`
+    - `{project_root}`
+    - `{repo_root}`
+  - [`/G:/TransDSSAT/scripts/run_interactive_dssat_controller.py`](/G:/TransDSSAT/scripts/run_interactive_dssat_controller.py) now bootstraps `PROJECT_ROOT` so direct script launch works from a DSSAT run directory
+  - [`/G:/TransDSSAT/tests/test_dssat_interactive.py`](/G:/TransDSSAT/tests/test_dssat_interactive.py) now locks the absolute controller-script formatting contract
+- new local validation passed for the launch-path fix:
+  - `python -m unittest tests.test_dssat_interactive tests.test_dssat_interactive_controller -v`
+  - `python -m compileall transdssat\dssat\interactive.py transdssat\dssat\__init__.py scripts\run_interactive_dssat_controller.py scripts\smoke_interactive_dssat_session.py tests\test_dssat_interactive.py`
+- completed the first remote `patched_runtime_subprocess` smoke on the copied runtime boundary using a temporary boundary-probe runtime in place of the future Fortran patch:
+  - artifact root: `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_patched_subprocess_smoke_20260622_030429`
+  - smoke report: `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_patched_subprocess_smoke_20260622_030429/smoke_report.json`
+  - runtime boundary capture: `/fs/fast/u2021201693/lym/TransDSSAT/data/dssat_runs/dssat_official-maize-rand00000-wy2015-wet-irr301-n432-balanced-balanced_resource-quzhou_flvo_aquic-sw158-sn97-pd+7-interactive-session/interactive_protocol/runtime_boundary_capture.json`
+  - confirmed at the real subprocess boundary:
+    - `protocol_version = patched-dssat-v1`
+    - `engine_name = dssat_official`
+    - `backend_mode = interactive_patched`
+    - `runtime_role = patched`
+    - `crop_name = maize`
+    - `decision_interval_days = 5`
+    - `action_channels = irrigation_mm,nitrogen_kg_ha`
+    - `state_interface_contract` env payload matches the manifest payload exactly
+- tightened the interactive session startup diagnostics before the first real copied-runtime Fortran patch:
+  - [`/G:/TransDSSAT/transdssat/dssat/config.py`](/G:/TransDSSAT/transdssat/dssat/config.py) now exposes `DSSAT_INTERACTIVE_CONTROLLER_LOG_FILENAME`
+  - [`/G:/TransDSSAT/transdssat/dssat/interactive.py`](/G:/TransDSSAT/transdssat/dssat/interactive.py) now redirects controller stdout/stderr to a run-dir log file instead of swallowing them
+  - early-exit and timeout errors now surface the controller log path plus a short tail, so failed `session_ready` handshakes on the copied runtime are diagnosable without rerunning blindly
+  - [`/G:/TransDSSAT/scripts/smoke_interactive_dssat_session.py`](/G:/TransDSSAT/scripts/smoke_interactive_dssat_session.py) now always writes `controller_log_path` into the smoke report and returns structured error payloads on startup failure
+  - [`/G:/TransDSSAT/tests/test_dssat_interactive.py`](/G:/TransDSSAT/tests/test_dssat_interactive.py) now locks the controller-log config contract and the early-exit log-tail error path
+- new local validation passed for the controller-log diagnostics pass:
+  - `python -m unittest tests.test_dssat_interactive tests.test_dssat_interactive_controller -v`
+  - `python scripts\smoke_interactive_dssat_session.py --help`
+- added a reusable boundary-only patched-runtime stand-in script:
+  - [`/G:/TransDSSAT/scripts/dssat_interactive_boundary_probe.py`](/G:/TransDSSAT/scripts/dssat_interactive_boundary_probe.py)
+  - purpose: validate the real `patched_runtime_subprocess` launch contract without relying on a temp script outside the repo
+  - behavior: validates env + manifest metadata, writes `runtime_boundary_capture.json`, serves `session_ready`, one-or-more `step_response_XXXX.json`, and `final_outcome.json`
+- `transdssat/dssat/interactive_controller.py` now also supports `{project_root}` / `{repo_root}` placeholders inside `DSSAT_*_RUN_COMMAND`
+  - this removes the remaining copied-runtime subprocess path bug where a repo script could not be launched from `cwd=<run_dir>` without hardcoding an absolute path manually
+- added a reusable remote smoke wrapper:
+  - [`/G:/TransDSSAT/scripts/run_interactive_dssat_smoke_remote.sh`](/G:/TransDSSAT/scripts/run_interactive_dssat_smoke_remote.sh)
+  - purpose: standardize future tmux-launched copied-runtime interactive smokes with persistent `run.log` plus `smoke_report.json`
+- new local validation passed for the reusable boundary-probe path:
+  - `python -m unittest tests.test_dssat_interactive_controller tests.test_dssat_interactive -v`
+  - `python -m compileall transdssat\dssat\interactive_controller.py scripts\dssat_interactive_boundary_probe.py tests\test_dssat_interactive_controller.py`
+  - full local subprocess smoke passed with:
+    - `DSSAT_PATCHED_RUN_COMMAND="python {repo_root}/scripts/dssat_interactive_boundary_probe.py --mark-done-after-step"`
+    - `DSSAT_PATCHED_INTERACTIVE_LAUNCH_COMMAND="python {controller_script} --driver-mode patched_runtime_subprocess {session_manifest}"`
+    - report: [`/G:/TransDSSAT/automation_tmp/local_interactive_smoke/smoke_report.json`](/G:/TransDSSAT/automation_tmp/local_interactive_smoke/smoke_report.json)
+  - this confirms the real local chain:
+    - `smoke_interactive_dssat_session.py`
+    - `interactive.py`
+    - `run_interactive_dssat_controller.py`
+    - `interactive_controller.py`
+    - `patched_runtime_subprocess`
+    - `dssat_interactive_boundary_probe.py`
+    - completed `reset -> step -> close` successfully under the copied-runtime contract
+- used the new remote tmux wrapper path on `10.10.252.11`, but avoided overwriting the dirty remote repo by uploading a temporary overlay at:
+  - `/tmp/transdssat_remote_smoke_overlay_20260622_050445`
+- the first tmux-launched remote wrapper attempt exposed a real shell bug in:
+  - [`/G:/TransDSSAT/scripts/run_interactive_dssat_smoke_remote.sh`](/G:/TransDSSAT/scripts/run_interactive_dssat_smoke_remote.sh)
+  - root cause:
+    - bash `${VAR:-default}` expansions were embedding DSSAT placeholder strings such as `{experiment}` and `{session_manifest}`
+    - that corrupted the launch-command strings before Python `.format(...)` ran, yielding `ValueError: Single '}' encountered in format string`
+- fixed the remote smoke wrapper so DSSAT command defaults are now assigned with explicit `if [[ -z ... ]]` blocks instead of `${VAR:-...}` when the default contains DSSAT placeholders
+- reran the same remote tmux smoke after updating only the overlay wrapper, and the copied-runtime subprocess boundary completed successfully through the standardized wrapper path:
+  - tmux window: `transdssat:interactive-smoke`
+  - artifact root:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_patched_subprocess_smoke_20260622_050445_retry`
+  - smoke report:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_patched_subprocess_smoke_20260622_050445_retry/smoke_report.json`
+  - result:
+    - `status = ok`
+    - completed `reset -> step -> close`
+    - `backend_mode = interactive_patched`
+    - `driver_mode = patched_runtime_subprocess`
+    - `probe_mode = boundary_probe`
+- no training, GPU work, remote patch build, or Fortran source edit was started this wakeup; this round stayed CPU-safe and startup-diagnostics-focused only
+- added a repo-local Fortran bridge helper so the first copied-runtime patch no longer needs to handcraft full JSON inside DSSAT source:
+  - [`/G:/TransDSSAT/transdssat/dssat/interactive_bridge.py`](/G:/TransDSSAT/transdssat/dssat/interactive_bridge.py)
+  - [`/G:/TransDSSAT/scripts/dssat_interactive_protocol_helper.py`](/G:/TransDSSAT/scripts/dssat_interactive_protocol_helper.py)
+- the helper now covers the four runtime-facing bridge operations behind the existing protocol:
+  - write `session_ready.json` from a simple state payload
+  - wait for `step_request_XXXX.json` and emit a Fortran-friendly `key=value` action file
+  - write `step_response_XXXX.json` from a simple state payload plus optional trace/final outcome payloads
+  - write `final_outcome.json` from a simple outcome payload
+- this narrows the first real Fortran patch to simple text I/O plus `SYSTEM(...)` calls, instead of full JSON serialization in legacy source
+- added local regression coverage for the helper contract:
+  - [`/G:/TransDSSAT/tests/test_dssat_interactive_bridge.py`](/G:/TransDSSAT/tests/test_dssat_interactive_bridge.py)
+- local validation passed for the helper layer:
+  - `python -m unittest tests.test_dssat_interactive_bridge tests.test_dssat_interactive tests.test_dssat_interactive_controller -v`
+  - `python -m compileall transdssat\dssat\interactive_bridge.py scripts\dssat_interactive_protocol_helper.py tests\test_dssat_interactive_bridge.py`
+- filled the missing repo-local patched-runtime build workflow so future Fortran edits do not depend on ad hoc SSH command history:
+  - overlay convention doc:
+    - [`/G:/TransDSSAT/dssat_patch_overlay/README.md`](/G:/TransDSSAT/dssat_patch_overlay/README.md)
+  - remote build wrapper:
+    - [`/G:/TransDSSAT/scripts/build_patched_dssat_runtime_remote.sh`](/G:/TransDSSAT/scripts/build_patched_dssat_runtime_remote.sh)
+  - workflow note:
+    - [`/G:/TransDSSAT/docs/patched-dssat-remote-build-workflow-2026-06-22-cn.md`](/G:/TransDSSAT/docs/patched-dssat-remote-build-workflow-2026-06-22-cn.md)
+- the new wrapper now standardizes:
+  - source clone to a temporary patched source tree
+  - overlay copy with upstream-relative paths
+  - `cmake` rebuild of `dscsm048`
+  - refresh of `/fs/fast/u2021201693/lym/dssat-runtime-patched/dscsm048`
+  - optional JSON build report for artifact tracking
+- this means the next Fortran wakeup can go directly to:
+  - place `CSM.for` / `LAND.for` edits under `dssat_patch_overlay/`
+  - upload the overlay to the remote host
+  - rebuild the copied runtime with one wrapper
+  - rerun parity and interactive smoke immediately after
+- local static validation for the new wrapper was attempted with:
+  - `bash -n scripts/build_patched_dssat_runtime_remote.sh`
+- on this Windows host the Bash invocation emitted a WSL localhost/NAT warning, but the command returned success and did not surface a shell syntax error from the script itself
+- tightened the patched-runtime subprocess env contract one step further for real Fortran use:
+  - added `DSSAT_INTERACTIVE_HELPER_COMMAND` in [`/G:/TransDSSAT/transdssat/dssat/interactive_controller.py`](/G:/TransDSSAT/transdssat/dssat/interactive_controller.py)
+  - locked it in [`/G:/TransDSSAT/tests/test_dssat_interactive_controller.py`](/G:/TransDSSAT/tests/test_dssat_interactive_controller.py)
+  - mirrored it into [`/G:/TransDSSAT/docs/patched-dssat-interactive-protocol-contract-2026-06-22-cn.md`](/G:/TransDSSAT/docs/patched-dssat-interactive-protocol-contract-2026-06-22-cn.md)
+- implemented the first real copied-runtime Fortran overlay stage in:
+  - [`/G:/TransDSSAT/dssat_patch_overlay/CSM_Main/LAND.for`](/G:/TransDSSAT/dssat_patch_overlay/CSM_Main/LAND.for)
+- current stage-1 Fortran behavior is intentionally narrow:
+  - emit a helper-backed real `session_ready.json` during `SEASINIT`
+  - enter helper-backed `await-action` at the `LAND RATE` boundary
+  - support `close_request` cleanup by emitting a placeholder `final_outcome.json`
+  - it does **not** yet emit `step_response_XXXX.json`
+  - it does **not** yet inject irrigation / nitrogen into `MgmtOps.for`
+- upgraded the remote patched-runtime rebuild wrapper so it can auto-reuse the known working Fortran compiler from the existing v4.8.5 build cache instead of requiring a manual `FC` export each wakeup:
+  - [`/G:/TransDSSAT/scripts/build_patched_dssat_runtime_remote.sh`](/G:/TransDSSAT/scripts/build_patched_dssat_runtime_remote.sh)
+- local validation passed for the Python-side changes:
+  - `python -m unittest tests.test_dssat_interactive_controller tests.test_dssat_interactive_bridge -v`
+- remote patched-runtime rebuild now succeeds with the stage-1 overlay:
+  - refreshed binary: `/fs/fast/u2021201693/lym/dssat-runtime-patched/dscsm048`
+- completed the first real copied-runtime smoke on patched `dscsm048` itself, no boundary probe:
+  - wrapper: `scripts/run_interactive_dssat_smoke_remote.sh`
+  - artifact root:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_session_ready_smoke_20260622_retry`
+  - report:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_session_ready_smoke_20260622_retry/smoke_report.json`
+  - result:
+    - `status = ok`
+    - real patched runtime produced `session_ready`
+    - `reset_info.backend_mode = interactive_patched`
+    - `bridge_stage = reset`
+    - `final_outcome` was produced through the early-close helper path
+- this means the boundary probe is no longer required for the `reset -> close` handshake on the copied runtime; the next missing runtime surface is now strictly `step_response` plus later `MgmtOps.for` action injection
+- extended `dssat_patch_overlay/CSM_Main/LAND.for` from the stage-1 handshake into the first real decision-window response loop:
+  - the patched runtime now waits for one action only when a new decision window starts
+  - it advances for the requested interval and then emits one helper-backed `step_response_XXXX.json`
+  - current limitations remain:
+    - no `MgmtOps.for` irrigation / nitrogen injection yet
+    - `reward` is still a placeholder `0.0`
+    - `final_outcome` still uses the placeholder early-close path
+- rebuilt the copied patched runtime with the new step-response overlay through a temporary remote overlay upload:
+  - overlay root: `/tmp/transdssat_overlay_stepresponse_20260622_090414`
+  - build report:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/patched_runtime_build_stepresponse_20260622_090414/build_report.json`
+  - refreshed binary:
+    - `/fs/fast/u2021201693/lym/dssat-runtime-patched/dscsm048`
+- rejected one misleading smoke artifact because it accidentally used the controller default `replay_bridge` path rather than the real copied runtime:
+  - diagnostic-only artifact:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_step_response_smoke_20260622_090414/smoke_report.json`
+  - rejection reason:
+    - `reset_info.backend_mode = season_replay_wrapper_external_controller`
+- completed the first real copied-runtime patched subprocess smoke that exercised `session_ready -> step_response -> final_outcome` on patched `dscsm048` itself:
+  - artifact root:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_step_response_patched_smoke_20260622_090414`
+  - report:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_step_response_patched_smoke_20260622_090414/smoke_report.json`
+  - result:
+    - `status = ok`
+    - `reset_info.backend_mode = interactive_patched`
+    - `step.info.bridge_stage = step_response`
+    - `step.info.days_executed = 5`
+    - `step.next_state.day_index = 5`
+- this narrows the remaining copied-runtime gap again:
+  - `step_response` now exists on the real patched binary
+  - the next missing functional surface is `MgmtOps.for` action injection
+  - after that, the next quality gap is replacing placeholder reward/final-outcome values with true DSSAT-derived outputs
+- implemented the first real interactive action-injection overlay in:
+  - [`/G:/TransDSSAT/dssat_patch_overlay/Management/MgmtOps.for`](/G:/TransDSSAT/dssat_patch_overlay/Management/MgmtOps.for)
+- the new `MgmtOps.for` overlay now:
+  - preserves vanilla `Fert_Place` seasonal initialization
+  - skips daily automatic fertilizer / irrigation scheduling in interactive mode
+  - injects `irrigation_mm` through `IRRAMT`
+  - injects `nitrogen_kg_ha` through native `FERTLAYERS` + `FERTAPPLY`
+  - leaves the non-interactive path unchanged when `DSSAT_INTERACTIVE_MODE` is off
+- rebuilt the copied patched runtime successfully with that overlay:
+  - remote overlay root:
+    - `/tmp/transdssat_overlay_mgmtops_20260622_094717`
+  - remote build root:
+    - `/tmp/transdssat_dssat_build_mgmtops_20260622_094717`
+  - build report:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/patched_runtime_build_mgmtops_20260622_094717/build_report.json`
+- completed one real patched-runtime smoke after the `MgmtOps.for` rebuild with explicit subprocess mode:
+  - artifact root:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_mgmtops_injection_smoke_20260622_094717`
+  - report:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_mgmtops_injection_smoke_20260622_094717/smoke_report.json`
+  - result:
+    - `status = ok`
+    - `reset_info.backend_mode = interactive_patched`
+    - `step.info.bridge_stage = step_response`
+    - `step.next_state.day_index = 5`
+    - `step.next_state.root_zone_water_mm = 25.1393`
+    - `step.next_state.soil_nitrogen_kg_ha = 37.6901`
+- validation conclusion for this wakeup:
+  - the copied runtime still completes the full `reset -> step -> close` interactive chain after `MgmtOps.for` patching
+  - the step-state payload now moves in a direction consistent with non-zero irrigation / nitrogen actions
+  - however, `final_outcome.json` is still placeholder-only and the DSSAT artifact-side action-accounting proof is not yet strict enough to treat this as the final action-validation gate
+- replaced the helper-side placeholder reward/final-outcome path with a parser-backed progress tracker in:
+  - [`/G:/TransDSSAT/transdssat/dssat/interactive_bridge.py`](/G:/TransDSSAT/transdssat/dssat/interactive_bridge.py)
+- the helper now:
+  - initializes a protocol-local `interactive_progress.json` state cache at `session_ready`
+  - reconstructs per-step reward from the real step request plus `step_reward(...)`
+  - accumulates irrigation / nitrogen totals and operation count across the interactive session
+  - derives terminal `final_outcome` from real DSSAT outputs through `DSSATOutputParser` plus `reward_from_outcome(...)`
+  - reuses the cached terminal outcome when `close_request` later asks for `final_outcome.json`
+- added regression coverage for the new helper behavior in:
+  - [`/G:/TransDSSAT/tests/test_dssat_interactive_bridge.py`](/G:/TransDSSAT/tests/test_dssat_interactive_bridge.py)
+- local validation passed for the helper-side reward/outcome upgrade:
+  - `python -m unittest tests.test_dssat_interactive_bridge tests.test_dssat_interactive_controller tests.test_dssat_interactive -v`
+  - `python -m compileall transdssat\dssat\interactive_bridge.py tests\test_dssat_interactive_bridge.py`
+- added artifact-isolated action-effect validation support on top of the patched interactive smoke path:
+  - [`/G:/TransDSSAT/scripts/smoke_interactive_dssat_session.py`](/G:/TransDSSAT/scripts/smoke_interactive_dssat_session.py) now records `requested_action`, `decision_interval_days`, and optional `archived_run_dir`
+  - [`/G:/TransDSSAT/scripts/validate_interactive_dssat_action_effect.py`](/G:/TransDSSAT/scripts/validate_interactive_dssat_action_effect.py) now compares baseline-vs-action smoke artifacts through real `Summary.OUT` / `PlantGro.OUT` / `SoilWat.OUT` / `SoilNi.OUT`
+  - [`/G:/TransDSSAT/scripts/run_interactive_dssat_action_validation_remote.sh`](/G:/TransDSSAT/scripts/run_interactive_dssat_action_validation_remote.sh) now standardizes paired remote smokes plus artifact-level validation
+  - regression coverage added in [`/G:/TransDSSAT/tests/test_validate_interactive_dssat_action_effect.py`](/G:/TransDSSAT/tests/test_validate_interactive_dssat_action_effect.py)
+- local validation passed for the new action-effect tooling:
+  - `python -m unittest tests.test_validate_interactive_dssat_action_effect tests.test_dssat_interactive_bridge tests.test_dssat_interactive_controller tests.test_dssat_interactive -v`
+  - `python -m compileall scripts\smoke_interactive_dssat_session.py scripts\validate_interactive_dssat_action_effect.py scripts\run_interactive_dssat_action_validation_remote.sh tests\test_validate_interactive_dssat_action_effect.py`
+- completed the first remote artifact-level paired validation on patched `dscsm048` itself:
+  - artifact root:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_action_effect_validation_20260622_131500`
+  - result file:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_action_effect_validation_20260622_131500/action_effect_validation.json`
+  - validation status:
+    - `status = ok`
+    - `irrigation_effect_observed = true`
+    - `nitrogen_effect_observed = true`
+    - `terminal_water_shift_observed = true`
+    - `terminal_nitrogen_shift_observed = true`
+- the paired validation also exposed the next real bug:
+  - requested step action was only `irrigation_mm=12` and `nitrogen_kg_ha=18`
+  - but DSSAT artifact deltas landed at `total_irrigation_mm=60` and `total_nitrogen_kg_ha=90`
+  - this strongly indicates the current `MgmtOps.for` interactive injection is being applied once per day inside the 5-day decision window, not once per PPO step
+- another clarified boundary from this wakeup:
+  - protocol-side `close_session()` still reports a placeholder-looking zero `final_outcome` in the smoke JSON
+  - but the archived DSSAT artifact snapshots already contain enough real output for parser-side action validation
+- this wakeup stayed CPU-safe only:
+  - no remote patched-runtime rebuild
+  - no GPU or training work
+- 2026-06-22 11:58 Asia/Shanghai incremental update:
+  - patched `dssat_patch_overlay/Management/MgmtOps.for` so interactive `TDINT_IRR` and `TDINT_N` are consumed once per PPO step instead of remaining live across the whole decision window
+  - tightened `scripts/validate_interactive_dssat_action_effect.py` so the gate now requires delta-scale agreement with the requested action, not just any positive effect; added regression coverage in `tests/test_validate_interactive_dssat_action_effect.py`
+  - local validation passed:
+    - `python -m unittest tests.test_validate_interactive_dssat_action_effect tests.test_dssat_interactive_bridge tests.test_dssat_interactive_controller -v`
+    - `python -m compileall scripts\validate_interactive_dssat_action_effect.py tests\test_validate_interactive_dssat_action_effect.py transdssat\dssat\interactive_bridge.py`
+  - remote copied-runtime rebuild succeeded after uploading only the minimal overlay/script delta:
+    - refreshed binary: `/fs/fast/u2021201693/lym/dssat-runtime-patched/dscsm048`
+    - build artifact root:
+      - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_action_effect_validation_fix_20260622_20260622_114650`
+  - the intended remote paired validation is still not closed because the validation wrapper chain exposed two new path-level blockers:
+    - baseline zero-action smoke in `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_action_effect_validation_fix_retry_20260622_20260622_115246` ran through `backend_mode = season_replay_wrapper_external_controller` instead of `interactive_patched`, so that artifact is not admissible as patched-runtime action proof
+    - action-applied smoke in the same artifact root failed before `step_response_0000.json` arrived, with controller-log tail ending in `json.decoder.JSONDecodeError: Expecting value`
+  - this means the new once-per-step `MgmtOps.for` patch is implemented and the old `12/18 -> 60/90` validator loophole is closed locally, but the remote proof is currently blocked by the smoke/driver route rather than by another confirmed Fortran action-scale failure
+- 2026-06-22 12:32 Asia/Shanghai incremental update:
+  - fixed the remote smoke launcher default so patched-runtime smokes now request the controller explicitly with `--driver-mode patched_runtime_subprocess` in `scripts/run_interactive_dssat_smoke_remote.sh`
+  - hardened the Python-side file protocol against partial JSON races:
+    - `transdssat/dssat/interactive.py` now writes `session_manifest`, `step_request`, and `close_request` via atomic rename and tolerates transient `JSONDecodeError` while polling response files
+    - `transdssat/dssat/interactive_controller.py` now atomically writes controller-side JSON payloads and retries short reads on partially written request files
+  - added regression coverage for those two protocol fixes:
+    - `tests/test_dssat_interactive.py`
+    - `tests/test_dssat_interactive_controller.py`
+  - local validation passed:
+    - `python -m unittest tests.test_dssat_interactive tests.test_dssat_interactive_controller tests.test_validate_interactive_dssat_action_effect -v`
+    - `python -m compileall transdssat\dssat\interactive.py transdssat\dssat\interactive_controller.py tests\test_dssat_interactive.py tests\test_dssat_interactive_controller.py`
+    - `bash -n scripts/run_interactive_dssat_smoke_remote.sh`
+  - remote diagnosis changed materially after syncing the launcher/runtime Python fixes:
+    - the paired-validation route no longer showed the previous replay-bridge fallback or `step_request_0000.json` decode-race symptom
+    - the first true patched-runtime baseline rerun now fails earlier because patched `dscsm048` exits without emitting `session_ready.json`
+    - controller log for `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_action_effect_validation_fix_repo_20260622_123200/baseline_zero_action/smoke_report.json` shows only season-output tail, which means the next blocker has shifted again from launcher/protocol glue to the copied-runtime interactive reset path itself
 
 ## Current active runs
 
-- no active training run remains for this rollback verification task
-- the earlier tmux training window `transdssat:ppo-baseline-rerun` has exited after successful completion
+- no active training run
+- no active remote runtime comparison
+- no active remote patch build
+- no active valid patched-runtime action-scale proof run
+- no active paired validation run; the latest full-overlay rerun finished successfully
 
 ## Next immediate action
 
-1. Do not start a new run unless explicitly requested.
-2. If work continues, switch to root-cause analysis for why `epoch 5` is healthy but late epochs collapse to zero input.
-3. Keep any future corrective design within `1-3` minimal strategies, per user preference.
+1. Fold the validated helper / validator updates into the remote mainline path so future patched-runtime smokes do not require a temporary `/tmp` Python overlay.
+2. Decide whether the current warning-backed short-season termination in the paired smoke is acceptable for the next regression stage or whether the smoke scenario/close path must be tightened first.
+3. After the remote mainline sync is admissible, rerun the same paired validation through the normal repo path to prove both step-scale correctness and final-outcome correctness without overlay assistance.
+
+- 2026-06-22 13:16 Asia/Shanghai incremental update:
+  - diagnosed the `session_ready.json` regression to a rebuild-input mistake rather than a new launcher or Fortran state bug:
+    - the latest failing runtime at `/fs/fast/u2021201693/lym/dssat-runtime-patched/dscsm048` matched `/tmp/transdssat_dssat_build_mgmtops_fix_20260622/build/bin/dscsm048`
+    - that rebuild used only a partial overlay carrying `Management/MgmtOps.for`, so `CSM_Main/LAND.for` fell back to vanilla source and the copied runtime lost the interactive reset/step bridge
+  - verified the runtime-process env itself was correct during the failing foreground diagnosis:
+    - `DSSAT_INTERACTIVE_MODE=1`
+    - `DSSAT_INTERACTIVE_HELPER_COMMAND=python /fs/fast/u2021201693/lym/TransDSSAT/scripts/dssat_interactive_protocol_helper.py`
+    - `DSSAT_INTERACTIVE_PROTOCOL_DIR=.../interactive_protocol`
+    - this ruled out the previous hypothesis that the reset failure came from missing `DSSAT_INTERACTIVE_*` env propagation
+  - hardened [`/G:/TransDSSAT/scripts/build_patched_dssat_runtime_remote.sh`](/G:/TransDSSAT/scripts/build_patched_dssat_runtime_remote.sh) so future patched-runtime rebuilds now fail fast unless the overlay root contains the full interactive patch set:
+    - `CSM_Main/CSM.for`
+    - `CSM_Main/LAND.for`
+    - `Management/MgmtOps.for`
+  - rebuilt the copied runtime remotely from the full repo overlay rather than a partial delta:
+    - build artifact root:
+      - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/patched_runtime_build_full_overlay_20260622_1318`
+    - refreshed runtime:
+      - `/fs/fast/u2021201693/lym/dssat-runtime-patched/dscsm048`
+  - reran the paired remote artifact-level validator on the rebuilt full-overlay runtime:
+    - artifact root:
+      - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_action_effect_validation_full_overlay_20260622_1318`
+    - result file:
+      - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_action_effect_validation_full_overlay_20260622_1318/action_effect_validation.json`
+    - validation status:
+      - `status = ok`
+      - `irrigation_scale_matches_request = true`
+      - `nitrogen_scale_matches_request = true`
+      - observed deltas:
+        - `total_irrigation_mm = 12.0`
+        - `total_nitrogen_kg_ha = 18.0`
+  - current interpretation after the successful full-overlay rerun:
+    - the previous reset-handshake failure was caused by a partial-overlay rebuild regression, not by the interactive launcher path itself
+    - the previous `12 / 18 -> 60 / 90` amplification is no longer present on the admissible full-overlay runtime
+    - the main remaining gap has shifted to terminal outcome alignment, because the smoke artifacts still show placeholder-like `yield_kg_ha = 0.0` and `cumulative_reward = 0.0` in the protocol-level `final_outcome`
+- 2026-06-22 13:49 Asia/Shanghai incremental update:
+  - diagnosed the terminal-outcome blocker to a remote Python sync gap rather than a new Fortran/runtime contract bug:
+    - local `transdssat/dssat/interactive_bridge.py` already had parser-backed `interactive_progress` / `final_outcome` logic
+    - the remote repo copy under `/fs/fast/u2021201693/lym/TransDSSAT` was still on the older helper implementation, which explains why repo-path smokes wrote zero-placeholder `final_outcome.json` and never produced `interactive_progress.json`
+  - staged a temporary remote Python overlay at:
+    - `/tmp/transdssat_final_outcome_overlay_20260622_1428`
+    - contents: current local `transdssat/` package plus the interactive smoke / helper / validator scripts needed for the copied-runtime path
+  - reran the paired patched-runtime validation through that overlay without modifying the dirty remote repo:
+    - artifact root:
+      - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_action_effect_validation_final_outcome_overlay_20260622_1452`
+  - confirmed the protocol-side terminal outcome is now parser-backed on the real patched runtime:
+    - baseline smoke `final_outcome.cumulative_reward = -15.0`
+    - action smoke `final_outcome.cumulative_reward = -15.121284`
+    - both smoke reports now include non-empty `environmental_metrics` plus `interactive_reward_source = "dssat_output_parser"`
+  - upgraded [`/G:/TransDSSAT/scripts/validate_interactive_dssat_action_effect.py`](/G:/TransDSSAT/scripts/validate_interactive_dssat_action_effect.py) so the paired validator now:
+    - keeps archived DSSAT artifact parsing as the physical oracle for action-scale checks
+    - surfaces protocol `final_outcome` as the primary reported outcome when available
+    - records explicit protocol-vs-archived alignment checks for yield, biomass, irrigation, nitrogen, and terminal water / nitrogen state fields
+  - added regression coverage in [`/G:/TransDSSAT/tests/test_validate_interactive_dssat_action_effect.py`](/G:/TransDSSAT/tests/test_validate_interactive_dssat_action_effect.py)
+  - local validation passed:
+    - `python -m unittest tests.test_validate_interactive_dssat_action_effect -v`
+    - `python -m compileall scripts\validate_interactive_dssat_action_effect.py tests\test_validate_interactive_dssat_action_effect.py`
+  - regenerated the paired validator report on the new overlay-backed smoke artifacts:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_action_effect_validation_final_outcome_overlay_20260622_1452/action_effect_validation.json`
+  - the new report now proves both contracts on the same artifact set:
+    - `irrigation_scale_matches_request = true`
+    - `nitrogen_scale_matches_request = true`
+    - `baseline_protocol_matches_archived = true`
+    - `action_protocol_matches_archived = true`
+    - `baseline_protocol_is_parser_backed = true`
+    - `action_protocol_is_parser_backed = true`
+  - current interpretation:
+    - the protocol-level terminal outcome contract is now functionally closed on the real patched runtime
+    - the remaining gap is operational: promote the validated overlay-side Python updates into the normal remote repo path so future admissions do not depend on `/tmp` overlay staging
+- 2026-06-22 14:30 Asia/Shanghai incremental update:
+  - synced the validated helper / validator updates into the normal remote repo path at `/fs/fast/u2021201693/lym/TransDSSAT`:
+    - `transdssat/dssat/interactive_bridge.py`
+    - `scripts/validate_interactive_dssat_action_effect.py`
+    - `tests/test_validate_interactive_dssat_action_effect.py`
+  - verified the promoted repo path with remote unit coverage:
+    - `conda run --no-capture-output -n transdssat python -m unittest tests.test_validate_interactive_dssat_action_effect -v`
+  - reran the paired patched-runtime validator through the standard remote repo path without `/tmp` Python overlay:
+    - artifact root:
+      - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_action_effect_validation_repo_mainline_20260622_142418`
+    - result report:
+      - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_action_effect_validation_repo_mainline_20260622_142418/action_effect_validation.json`
+  - confirmed the standard repo-path artifact now proves the full interactive regression contract on the real patched runtime:
+    - `status = ok`
+    - `irrigation_scale_matches_request = true`
+    - `nitrogen_scale_matches_request = true`
+    - `baseline_protocol_matches_archived = true`
+    - `action_protocol_matches_archived = true`
+    - `baseline_protocol_is_parser_backed = true`
+    - `action_protocol_is_parser_backed = true`
+  - decided the current warning-backed short-season smoke artifact is acceptable as the regression gate for interactive protocol/action correctness because:
+    - baseline and action are compared under the same warning envelope
+    - the gate target is action-scale correctness plus protocol-vs-archived alignment
+    - those checks now pass on the standard repo path
+  - archived the completion result in:
+    - [`/G:/TransDSSAT/docs/interactive-patched-mainline-validation-2026-06-22-cn.md`](/G:/TransDSSAT/docs/interactive-patched-mainline-validation-2026-06-22-cn.md)
+- 2026-06-22 15:01 Asia/Shanghai incremental update:
+  - re-checked [`/G:/TransDSSAT/docs/CURRENT_AUTOMATION_TASK.md`](/G:/TransDSSAT/docs/CURRENT_AUTOMATION_TASK.md) and confirmed the official-DSSAT-only transition task remains `Completed`
+  - re-checked the worktree with `git status --short` and confirmed it is still dirty with the already-known local changes from the completed transition cycle
+  - deliberately did not start new code edits, remote smokes, patched-runtime rebuilds, DSSAT runs, or GPU work because no new `Bootstrap` assignment has been published
+  - next action remains to wait for a new `Bootstrap` task before any further implementation or experiment work

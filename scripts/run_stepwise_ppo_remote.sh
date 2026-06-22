@@ -18,10 +18,14 @@ done
 
 REPO_ROOT="${REPO_ROOT:-/fs/fast/u2021201693/lym/TransDSSAT}"
 CONDA_ENV_NAME="${CONDA_ENV_NAME:-transdssat}"
-export DSSAT_HOME="${DSSAT_HOME:-/fs/fast/u2021201693/lym/dssat-runtime}"
+export DSSAT_VANILLA_HOME="${DSSAT_VANILLA_HOME:-/fs/fast/u2021201693/lym/dssat-runtime}"
+export DSSAT_PATCHED_HOME="${DSSAT_PATCHED_HOME:-/fs/fast/u2021201693/lym/dssat-runtime-patched}"
+export DSSAT_HOME="${DSSAT_HOME:-$DSSAT_PATCHED_HOME}"
 export DSSAT_TEMPLATE_ROOT="${DSSAT_TEMPLATE_ROOT:-/fs/fast/u2021201693/lym/dssat-templates}"
 export DSSAT_PREPROCESS_COMMAND="${DSSAT_PREPROCESS_COMMAND:-python scripts/render_dssat_inputs.py {manifest}}"
-export DSSAT_RUN_COMMAND="${DSSAT_RUN_COMMAND:-/fs/fast/u2021201693/lym/dssat-runtime/dscsm048 A {experiment}}"
+export DSSAT_VANILLA_RUN_COMMAND="${DSSAT_VANILLA_RUN_COMMAND:-$DSSAT_VANILLA_HOME/dscsm048 A {experiment}}"
+export DSSAT_PATCHED_RUN_COMMAND="${DSSAT_PATCHED_RUN_COMMAND:-$DSSAT_PATCHED_HOME/dscsm048 A {experiment}}"
+export DSSAT_RUN_COMMAND="${DSSAT_RUN_COMMAND:-$DSSAT_PATCHED_RUN_COMMAND}"
 
 mkdir -p "$OUTPUT_DIR"
 RUN_LOG="${OUTPUT_DIR}/run.log"
@@ -33,6 +37,8 @@ echo "[run_stepwise_ppo_remote] started_at=$(date --iso-8601=seconds)"
 echo "[run_stepwise_ppo_remote] repo_root=$REPO_ROOT"
 echo "[run_stepwise_ppo_remote] output_dir=$OUTPUT_DIR"
 echo "[run_stepwise_ppo_remote] conda_env=$CONDA_ENV_NAME"
+echo "[run_stepwise_ppo_remote] dssat_vanilla_home=$DSSAT_VANILLA_HOME"
+echo "[run_stepwise_ppo_remote] dssat_patched_home=$DSSAT_PATCHED_HOME"
 
 COMMAND=(
   python -u scripts/train_stepwise_ppo.py

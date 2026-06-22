@@ -2,8 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
+import os
 from typing import Any
 
+from transdssat.dssat import (
+    InteractiveDSSATTransport,
+    PatchedInteractiveDSSATSession,
+)
 from transdssat.discrete_actions import (
     ActionConstraintRules,
     ActionConstraintSnapshot,
@@ -72,11 +77,15 @@ class StepwiseDecisionEnvironment:
         scenario: SimulationScenario,
         action_space: ContinuousActionSpace | None = None,
         constraint_rules: ActionConstraintRules | None = None,
+        official_backend_mode: str = "auto",
+        official_interactive_transport: InteractiveDSSATTransport | None = None,
     ) -> None:
         self.scenario = scenario
         self.action_space = action_space or default_continuous_action_space(scenario)
         self.constraint_rules = constraint_rules or default_action_constraint_rules(scenario)
         self.discrete_action_table = default_discrete_action_table(scenario)
+        self.official_backend_mode = resolve_official_backend_mode(official_backend_mode)
+        self.official_interactive_transport = official_interactive_transport
         self.base_env = self._make_backend(scenario)
         self.current_state: CropState | None = None
         self.remaining_irrigation_mm = scenario.irrigation_budget_mm
@@ -88,6 +97,11 @@ class StepwiseDecisionEnvironment:
 
     def _make_backend(self, scenario: SimulationScenario):
         if scenario.engine_name == "dssat_official":
+            if self.official_backend_mode == "interactive_patched":
+                return _InteractivePatchedOfficialBackend(
+                    scenario,
+                    transport=self.official_interactive_transport,
+                )
             return _OfficialStepwiseBackend(scenario)
         return make_proxy_environment(scenario)
 
@@ -155,7 +169,7 @@ class StepwiseDecisionEnvironment:
             self.remaining_nitrogen_kg_ha = max(0.0, self.remaining_nitrogen_kg_ha - executed_action.nitrogen_kg_ha)
             self.last_nitrogen_day = decision_day
 
-        if isinstance(self.base_env, _OfficialStepwiseBackend):
+        if isinstance(self.base_env, (_OfficialStepwiseBackend, _InteractivePatchedOfficialBackend)):
             next_state, reward_total, done, backend_info = self.base_env.step(
                 executed_action.to_crop_action(),
                 decision_interval_days=self.constraint_rules.decision_interval_days,
@@ -248,6 +262,14 @@ class _OfficialEvaluationSnapshot:
 
 
 class _OfficialStepwiseBackend:
+    """
+    Transitional official-DSSAT step-wise wrapper.
+
+    This is not yet a true gym-DSSAT-style interactive backend. It re-runs the
+    whole-season official DSSAT simulation after each accumulated action prefix
+    and then slices out the requested future state window.
+    """
+
     def __init__(self, scenario: SimulationScenario) -> None:
         self.scenario = scenario
         self.official_env = OfficialDSSATEnvironment()
@@ -285,6 +307,7 @@ class _OfficialStepwiseBackend:
         done = current_index >= len(self.current_snapshot.trajectory_states) - 1
         info = {
             "engine_name": "dssat_official",
+            "backend_mode": "season_replay_wrapper",
             "run_dir": self.current_snapshot.run_dir,
             "days_executed": min(
                 decision_interval_days,
@@ -329,3 +352,66 @@ class _OfficialStepwiseBackend:
     def _decision_date(self, day_index: int) -> str:
         planting = date.fromisoformat(self.scenario.planting_date)
         return (planting + timedelta(days=day_index)).isoformat()
+
+
+class _InteractivePatchedOfficialBackend:
+    def __init__(
+        self,
+        scenario: SimulationScenario,
+        *,
+        transport: InteractiveDSSATTransport | None,
+    ) -> None:
+        if transport is None:
+            raise NotImplementedError(
+                "Official DSSAT interactive_patched backend requires an interactive transport. "
+                "The patched runtime control channel is not implemented yet."
+            )
+        self.scenario = scenario
+        self.session = PatchedInteractiveDSSATSession(scenario, transport)
+        self.current_state: CropState | None = None
+        self.cumulative_reward = 0.0
+        self._final_outcome: CropOutcome | None = None
+
+    def reset(self) -> CropState:
+        result = self.session.reset()
+        self.current_state = result.state
+        self.cumulative_reward = 0.0
+        self._final_outcome = None
+        return result.state
+
+    def step(self, action: CropAction, *, decision_interval_days: int) -> tuple[CropState, float, bool, dict[str, Any]]:
+        if self.current_state is None:
+            raise RuntimeError("Interactive patched official backend has not been reset.")
+        result = self.session.step(
+            action,
+            decision_interval_days=decision_interval_days,
+        )
+        self.current_state = result.next_state
+        self.cumulative_reward = round(self.cumulative_reward + float(result.reward), 6)
+        if result.final_outcome is not None:
+            self._final_outcome = result.final_outcome
+        info = {
+            "engine_name": "dssat_official",
+            "backend_mode": "interactive_patched",
+            "run_dir": result.run_dir or self.session.last_run_dir,
+            "days_executed": decision_interval_days,
+            "daily_trace": list(result.daily_trace),
+            "official_cumulative_reward": round(self.cumulative_reward, 6),
+            **dict(result.info),
+        }
+        return result.next_state, round(float(result.reward), 6), bool(result.done), info
+
+    def final_outcome(self) -> CropOutcome:
+        if self._final_outcome is not None:
+            return self._final_outcome
+        self._final_outcome = self.session.final_outcome()
+        return self._final_outcome
+
+
+def resolve_official_backend_mode(requested_mode: str) -> str:
+    normalized = str(requested_mode or "auto").strip().lower()
+    if normalized == "auto":
+        normalized = str(os.environ.get("TRANSDSSAT_OFFICIAL_BACKEND_MODE", "season_replay_wrapper")).strip().lower()
+    if normalized not in {"season_replay_wrapper", "interactive_patched"}:
+        raise ValueError(f"Unsupported official backend mode: {requested_mode}")
+    return normalized

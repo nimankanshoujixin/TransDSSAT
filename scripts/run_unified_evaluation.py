@@ -17,7 +17,12 @@ from transdssat.unified_eval import UnifiedEvaluationRunner
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run the phase-1 unified evaluation protocol.")
-    parser.add_argument("--engine", default="dssat_proxy", help="wofost_proxy, dssat_proxy, dssat_official")
+    parser.add_argument(
+        "--engine",
+        choices=("dssat_official",),
+        default="dssat_official",
+        help="Evaluation backend. Official DSSAT only.",
+    )
     parser.add_argument("--train-count", type=int, default=12)
     parser.add_argument("--val-count", type=int, default=3)
     parser.add_argument("--test-count", type=int, default=5)

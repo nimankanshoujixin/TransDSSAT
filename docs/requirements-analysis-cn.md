@@ -345,3 +345,12 @@
 > **Decision Transformer 主体 + RL fine-tuning**
 
 这应作为后续实现文档和代码迭代的核心出发点。
+# 状态更新说明（2026-06-21）
+
+本文件若出现把 proxy 作为可接受主路线的推导或过渡判断，均以当前 official-DSSAT-only 政策覆盖。
+
+当前规范性结论：
+
+- 不再继续 proxy 主训练
+- 不再继续 proxy 主评估
+- 后续目标是直接补齐 official DSSAT 训练与评估闭环

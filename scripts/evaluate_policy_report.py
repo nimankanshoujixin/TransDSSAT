@@ -24,7 +24,12 @@ from transdssat.season import (
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Generate an agronomic evaluation report for baseline or RL policies.")
-    parser.add_argument("--engine", default="dssat_proxy", help="wofost_proxy, dssat_proxy, dssat_official")
+    parser.add_argument(
+        "--engine",
+        choices=("dssat_official",),
+        default="dssat_official",
+        help="Evaluation backend. Official DSSAT only.",
+    )
     parser.add_argument("--scenario-count", type=int, default=108, help="Number of scenarios to evaluate.")
     parser.add_argument("--sampling-mode", choices=("grid", "random"), default="random")
     parser.add_argument("--crops", nargs="+", default=["wheat", "maize"], help="Crop subset.")

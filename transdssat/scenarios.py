@@ -23,6 +23,18 @@ class SoilProfile:
     initial_nitrogen_kg_ha: float
     drainage_coeff: float
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "SoilProfile":
+        return cls(
+            soil_name=str(payload["soil_name"]),
+            field_capacity_mm=float(payload["field_capacity_mm"]),
+            wilting_point_mm=float(payload["wilting_point_mm"]),
+            saturation_mm=float(payload["saturation_mm"]),
+            initial_root_zone_water_mm=float(payload["initial_root_zone_water_mm"]),
+            initial_nitrogen_kg_ha=float(payload["initial_nitrogen_kg_ha"]),
+            drainage_coeff=float(payload["drainage_coeff"]),
+        )
+
 
 @dataclass(slots=True)
 class CropSpec:
@@ -35,6 +47,20 @@ class CropSpec:
     stage_water_demand: dict[str, float]
     stage_nitrogen_demand: dict[str, float]
     stage_canopy_growth: dict[str, float]
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "CropSpec":
+        return cls(
+            crop_name=str(payload["crop_name"]),
+            season_length_days=int(payload["season_length_days"]),
+            base_temperature_c=float(payload["base_temperature_c"]),
+            optimal_temperature_c=float(payload["optimal_temperature_c"]),
+            radiation_use_efficiency=float(payload["radiation_use_efficiency"]),
+            harvest_index=float(payload["harvest_index"]),
+            stage_water_demand={str(key): float(value) for key, value in dict(payload["stage_water_demand"]).items()},
+            stage_nitrogen_demand={str(key): float(value) for key, value in dict(payload["stage_nitrogen_demand"]).items()},
+            stage_canopy_growth={str(key): float(value) for key, value in dict(payload["stage_canopy_growth"]).items()},
+        )
 
 
 @dataclass(slots=True)
@@ -56,6 +82,24 @@ class CultivarParameterRecord:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "CultivarParameterRecord":
+        return cls(
+            cultivar_id=str(payload.get("cultivar_id", "")),
+            cultivar_name=str(payload.get("cultivar_name", "")),
+            crop_name=str(payload.get("crop_name", "")),
+            cultivar_reference=str(payload.get("cultivar_reference", "")),
+            parameter_vector=[float(value) for value in payload.get("parameter_vector", [])],
+            parameter_names=[str(value) for value in payload.get("parameter_names", [])],
+            parameter_units=[str(value) for value in payload.get("parameter_units", [])],
+            parameter_description=str(payload.get("parameter_description", "")),
+            dssat_cultivar_code=str(payload.get("dssat_cultivar_code", "")),
+            dssat_genotype_file=str(payload.get("dssat_genotype_file", "")),
+            dssat_ecotype_code=str(payload.get("dssat_ecotype_code", "")),
+            data_source=str(payload.get("data_source", "")),
+            missing_details=[str(value) for value in payload.get("missing_details", [])],
+        )
+
 
 @dataclass(slots=True)
 class CropContext:
@@ -73,6 +117,16 @@ class CropContext:
             "site_name": self.site_name,
             "notes": self.notes,
         }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "CropContext":
+        return cls(
+            crop_name=str(payload.get("crop_name", "")),
+            crop_type=str(payload.get("crop_type", "")),
+            cultivar=CultivarParameterRecord.from_dict(dict(payload.get("cultivar", {}))),
+            site_name=str(payload.get("site_name", "quzhou")),
+            notes=str(payload.get("notes", "")),
+        )
 
 
 @dataclass(slots=True)
@@ -92,6 +146,22 @@ class ObjectiveContext:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "ObjectiveContext":
+        return cls(
+            objective_id=str(payload.get("objective_id", "")),
+            objective_name=str(payload.get("objective_name", "")),
+            primary_metric=str(payload.get("primary_metric", "")),
+            reward_contract=str(payload.get("reward_contract", "reward_v2")),
+            reward_weights=dict(payload.get("reward_weights", {})),
+            budget_constraints=dict(payload.get("budget_constraints", {})),
+            soft_preferences=dict(payload.get("soft_preferences", {})),
+            report_metrics=[str(value) for value in payload.get("report_metrics", [])],
+            environmental_metric_specs=[dict(value) for value in payload.get("environmental_metric_specs", [])],
+            missing_details=[str(value) for value in payload.get("missing_details", [])],
+            notes=str(payload.get("notes", "")),
+        )
+
 
 @dataclass(slots=True)
 class StateInterfaceContract:
@@ -104,6 +174,17 @@ class StateInterfaceContract:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "StateInterfaceContract":
+        return cls(
+            version=str(payload.get("version", "")),
+            stable_core_fields=[str(value) for value in payload.get("stable_core_fields", [])],
+            pending_agronomy_fields=[str(value) for value in payload.get("pending_agronomy_fields", [])],
+            simulator_internal_fields=[str(value) for value in payload.get("simulator_internal_fields", [])],
+            derived_fields=[str(value) for value in payload.get("derived_fields", [])],
+            notes=[str(value) for value in payload.get("notes", [])],
+        )
 
 
 def default_state_interface_contract() -> StateInterfaceContract:
@@ -232,6 +313,26 @@ class DecisionContext:
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "DecisionContext":
+        return cls(
+            decision_interval_days=int(payload.get("decision_interval_days", 5)),
+            weather_mode=str(payload.get("weather_mode", "realistic")),
+            forecast_horizon_days=int(payload.get("forecast_horizon_days", 7)),
+            irrigation_min_gap_days=int(payload.get("irrigation_min_gap_days", 5)),
+            nitrogen_min_gap_days=int(payload.get("nitrogen_min_gap_days", 10)),
+            action_space_id=str(payload.get("action_space_id", "v2_joint_continuous")),
+            action_table_id=str(payload.get("action_table_id", "deprecated_v1_joint_discrete")),
+            allow_combined_actions=bool(payload.get("allow_combined_actions", True)),
+            state_interface_version=str(payload.get("state_interface_version", "v2026-06-admission-draft")),
+            full_state_fields=[str(value) for value in payload.get("full_state_fields", [])],
+            partial_observation_fields=[str(value) for value in payload.get("partial_observation_fields", [])],
+            stable_core_fields=[str(value) for value in payload.get("stable_core_fields", [])],
+            pending_agronomy_fields=[str(value) for value in payload.get("pending_agronomy_fields", [])],
+            simulator_internal_fields=[str(value) for value in payload.get("simulator_internal_fields", [])],
+            derived_fields=[str(value) for value in payload.get("derived_fields", [])],
+        )
+
 
 @dataclass(slots=True)
 class WeatherDay:
@@ -245,6 +346,17 @@ class WeatherDay:
     @property
     def tmean_c(self) -> float:
         return (self.tmin_c + self.tmax_c) / 2.0
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "WeatherDay":
+        return cls(
+            day_index=int(payload["day_index"]),
+            tmin_c=float(payload["tmin_c"]),
+            tmax_c=float(payload["tmax_c"]),
+            precipitation_mm=float(payload["precipitation_mm"]),
+            radiation_mj_m2=float(payload["radiation_mj_m2"]),
+            et0_mm=float(payload["et0_mm"]),
+        )
 
 
 @dataclass(slots=True)
@@ -312,6 +424,41 @@ class SimulationScenario:
             "decision_context": self.decision_context.to_dict(),
             "state_interface_contract": self.state_interface_contract_dict(),
         }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> "SimulationScenario":
+        crop_context_payload = payload.get("crop_context")
+        objective_context_payload = payload.get("objective_context")
+        decision_context_payload = payload.get("decision_context")
+        return cls(
+            scenario_id=str(payload["scenario_id"]),
+            engine_name=str(payload["engine_name"]),
+            crop_spec=CropSpec.from_dict(dict(payload["crop_spec"])),
+            soil_profile=SoilProfile.from_dict(dict(payload["soil_profile"])),
+            weather_regime=str(payload["weather_regime"]),
+            weather=[WeatherDay.from_dict(dict(day)) for day in payload.get("weather", [])],
+            irrigation_budget_mm=float(payload["irrigation_budget_mm"]),
+            nitrogen_budget_kg_ha=float(payload["nitrogen_budget_kg_ha"]),
+            management_mode=str(payload["management_mode"]),
+            seed=int(payload["seed"]),
+            weather_year=int(payload.get("weather_year", 2025)),
+            planting_date=str(payload.get("planting_date", "")),
+            cultivar_code=str(payload.get("cultivar_code", "")),
+            template_name=str(payload.get("template_name", "")),
+            experiment_file=str(payload.get("experiment_file", "")),
+            site_name=str(payload.get("site_name", "quzhou")),
+            crop_context=None if not crop_context_payload else CropContext.from_dict(dict(crop_context_payload)),
+            objective_context=(
+                default_objective_context()
+                if not objective_context_payload
+                else ObjectiveContext.from_dict(dict(objective_context_payload))
+            ),
+            decision_context=(
+                DecisionContext()
+                if not decision_context_payload
+                else DecisionContext.from_dict(dict(decision_context_payload))
+            ),
+        )
 
 
 def scenario_yield_floor_reference(scenario: SimulationScenario) -> float:
@@ -1027,7 +1174,7 @@ def _realistic_budget_profile(
 
 def build_realistic_quzhou_scenarios(
     target_count: int = 216,
-    engines: tuple[str, ...] = ("wofost_proxy", "dssat_proxy"),
+    engines: tuple[str, ...] = ("dssat_official",),
     crops_filter: tuple[str, ...] | None = None,
     seed: int = 20260417,
     weather_xlsx_path: str | Path | None = None,
@@ -1155,7 +1302,7 @@ def build_realistic_quzhou_scenarios(
 
 def build_quzhou_scenarios(
     target_count: int = 216,
-    engines: tuple[str, ...] = ("wofost_proxy", "dssat_proxy"),
+    engines: tuple[str, ...] = ("dssat_official",),
     crops_filter: tuple[str, ...] | None = None,
     sampling_mode: str = "grid",
     seed: int = 20260417,

@@ -308,9 +308,9 @@ def main() -> int:
     )
     parser.add_argument(
         "--engine",
-        choices=("dssat_official", "dssat_proxy", "wofost_proxy"),
+        choices=("dssat_official",),
         default="dssat_official",
-        help="Scenario engine for rollout, reward, and model selection.",
+        help="Scenario engine for rollout, reward, and model selection. Official DSSAT only.",
     )
     parser.add_argument(
         "--reward-contract",

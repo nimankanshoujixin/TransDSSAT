@@ -23,16 +23,19 @@ class DSSATRunResult:
 
 
 class DSSATRunner:
-    def __init__(self, config: DSSATRunConfig | None = None) -> None:
-        self.config = config or DSSATRunConfig.from_env()
+    def __init__(self, config: DSSATRunConfig | None = None, *, runtime_role: str = "patched") -> None:
+        self.config = config or DSSATRunConfig.from_env(runtime_role=runtime_role)
         self.builder = DSSATInputBuilder(self.config)
 
     def prepare(self, scenario: SimulationScenario, policy: SeasonPolicy) -> DSSATRunContext:
         if not self.config.runtime_root:
-            raise RuntimeError("DSSAT_HOME is not set.")
+            raise RuntimeError(
+                f"DSSAT runtime path is not set for role={self.config.runtime_role}. "
+                "Set DSSAT_PATCHED_HOME or DSSAT_VANILLA_HOME, or fall back to DSSAT_HOME."
+            )
         if str(self.config.runtime_root) == "." or not self.config.runtime_root.exists():
             raise RuntimeError(
-                f"DSSAT_HOME does not exist: {self.config.runtime_root}. "
+                f"DSSAT runtime does not exist for role={self.config.runtime_role}: {self.config.runtime_root}. "
                 "Install the official DSSAT runtime on the server first."
             )
         return self.builder.build(scenario, policy)
@@ -52,8 +55,9 @@ class DSSATRunner:
 
         if not self.config.run_command:
             raise RuntimeError(
-                "DSSAT_RUN_COMMAND is not set. Provide a command template that can execute the "
-                "prepared run directory, for example a wrapper script or the DSSAT executable."
+                f"DSSAT run command is not set for role={self.config.runtime_role}. "
+                "Provide DSSAT_PATCHED_RUN_COMMAND / DSSAT_VANILLA_RUN_COMMAND, or fall back to "
+                "DSSAT_RUN_COMMAND with a command template that can execute the prepared run directory."
             )
 
         return_code = self._run_command(self.config.run_command, context, stdout_path, stderr_path)
