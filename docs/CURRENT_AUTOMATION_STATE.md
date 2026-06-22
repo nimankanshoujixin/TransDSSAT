@@ -1,7 +1,7 @@
 # Current Automation State
 
 ## Last updated
-2026-06-22 15:01 Asia/Shanghai
+2026-06-22 16:02 Asia/Shanghai
 
 ## Mode
 Completed
@@ -615,3 +615,9 @@ The proxy-to-official DSSAT transition task is complete. Proxy remains deprecate
   - re-checked the worktree with `git status --short` and confirmed it is still dirty with the already-known local changes from the completed transition cycle
   - deliberately did not start new code edits, remote smokes, patched-runtime rebuilds, DSSAT runs, or GPU work because no new `Bootstrap` assignment has been published
   - next action remains to wait for a new `Bootstrap` task before any further implementation or experiment work
+- 2026-06-22 16:02 Asia/Shanghai incremental update:
+  - performed repository cleanup for the completed official-DSSAT transition branch before archival handoff
+  - cleaned the workspace root by removing ignored `_*.py` scratch files and relocating local reference materials `文档/`, `玉米模型/`, and `作物模型_20260616.zip` under ignored `research_notes/local_reference_materials/`
+  - tightened [README.md](/G:/TransDSSAT/README.md) and [.gitignore](/G:/TransDSSAT/.gitignore) so the mainline repo scope now explicitly distinguishes tracked integration code from untracked local DSSAT/raw-data/reference assets
+  - committed the current mainline snapshot as `a103b23` (`Switch mainline to official DSSAT interactive runtime`)
+  - current task remains `Completed`; next action is still to wait for a new `Bootstrap` assignment
