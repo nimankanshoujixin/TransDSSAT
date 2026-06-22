@@ -21,6 +21,9 @@ The observed-management equivalence gate is now admitted on `wuhu_rice_calibrate
   - `source_policy_matches_reconstructed_interactive_policy = true`
   - `all_semantic_files_match = true`
   - `all_outcome_fields_match = true`
+- Repository submission:
+  - committed as `47182f1` (`Admit rice observed-management parity`)
+  - pushed to `origin/main` on `2026-06-23`
 
 ## Delivered Work
 
