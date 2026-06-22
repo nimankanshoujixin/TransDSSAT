@@ -281,6 +281,85 @@ class FileSystemInteractiveTransportTests(unittest.TestCase):
             self.assertIn("controller.log", message)
             self.assertIn("fatal startup mismatch", message)
 
+    def test_wait_for_json_recovers_terminal_step_response_from_final_outcome(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            protocol = FileSystemInteractiveProtocol(root_dir=root / "protocol")
+            protocol.root_dir.mkdir(parents=True, exist_ok=True)
+            run_dir = root / "run"
+            run_dir.mkdir(parents=True, exist_ok=True)
+            controller = FileSystemInteractiveControllerConfig(
+                launch_command="python -c \"pass\"",
+                log_filename="controller.log",
+                poll_interval_seconds=0.01,
+            )
+            transport = FileSystemInteractiveDSSATTransport(
+                protocol=protocol,
+                controller=controller,
+                run_dir=run_dir,
+            )
+            transport.controller_log_path.write_text("normal season end\n", encoding="utf-8")
+            transport.current_step_index = 7
+            transport._last_cumulative_reward = 1.25
+            (protocol.root_dir / "interactive_progress.json").write_text(
+                json.dumps(
+                    {
+                        "run_dir": str(run_dir),
+                        "last_state": {
+                            "day_index": 125,
+                            "stage": "in_season",
+                            "stage_index": 1,
+                            "soil_moisture": 0.78,
+                            "root_zone_water_mm": 22.9,
+                            "soil_nitrogen_kg_ha": 4.56,
+                            "canopy_cover": 0.02,
+                            "biomass_kg_ha": 0.0,
+                            "water_stress": 1.0,
+                            "nitrogen_stress": 0.75,
+                            "tmean_c": 18.7,
+                            "precipitation_mm": 5.8,
+                            "et0_mm": 0.35,
+                            "radiation_mj_m2": 18.6,
+                        },
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            protocol.final_outcome_path.write_text(
+                json.dumps(
+                    {
+                        "yield_kg_ha": 1623.0,
+                        "biomass_kg_ha": 3391.0,
+                        "total_irrigation_mm": 0.0,
+                        "total_nitrogen_kg_ha": 0.0,
+                        "water_use_efficiency": 0.0,
+                        "nitrogen_use_efficiency": 0.0,
+                        "cumulative_reward": 1.815426,
+                        "environmental_metrics": {},
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            class FakeProcess:
+                def poll(self) -> int:
+                    return 0
+
+            transport.process = FakeProcess()
+            payload = transport._wait_for_json(
+                protocol.response_path(7),
+                timeout_seconds=0.02,
+                timeout_label="interactive step response 7",
+            )
+
+            self.assertTrue(payload["done"])
+            self.assertTrue(payload["info"]["terminal_response_recovered"])
+            self.assertEqual(payload["next_state"]["day_index"], 125)
+            self.assertAlmostEqual(payload["reward"], 1.815426 - 1.25, places=6)
+            self.assertTrue(protocol.response_path(7).exists())
+
     def test_step_session_writes_request_atomically_without_tmp_suffix_leak(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

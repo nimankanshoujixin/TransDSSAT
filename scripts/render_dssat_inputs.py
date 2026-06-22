@@ -243,6 +243,22 @@ def extract_template_planting_date(lines: list[str]) -> str:
     raise RuntimeError("Could not locate planting date in DSSAT experiment file.")
 
 
+def extract_treatment_planting_date(lines: list[str], treatment_no: int) -> str:
+    in_planting = False
+    for line in lines:
+        if line.startswith("*PLANTING DETAILS"):
+            in_planting = True
+            continue
+        if in_planting and line.startswith("*") and not line.startswith("*PLANTING DETAILS"):
+            break
+        if not in_planting or line.startswith("@") or not line.strip():
+            continue
+        parts = line.split()
+        if len(parts) >= 2 and parts[0].isdigit() and int(parts[0]) == treatment_no:
+            return parts[1]
+    raise RuntimeError(f"Could not locate planting date for treatment {treatment_no} in DSSAT experiment file.")
+
+
 def resolve_scenario_planting_yyddd(scenario_payload: dict[str, object], fallback: str) -> str:
     planting_date = str(scenario_payload.get("planting_date", "")).strip()
     if not planting_date:
@@ -300,6 +316,14 @@ def extract_treatment_ids(lines: list[str]) -> list[int]:
         if first.isdigit():
             treatment_ids.append(int(first))
     return treatment_ids or [1]
+
+
+def infer_active_treatment_no(scenario_payload: dict[str, object]) -> int:
+    scenario_id = str(scenario_payload.get("scenario_id", "")).strip()
+    match = re.search(r"-tr(\d+)-real-subset$", scenario_id)
+    if match:
+        return int(match.group(1))
+    return 0
 
 
 def build_irrigation_lines(policy: list[PolicyRow], planting_yyddd: str, treatment_ids: list[int]) -> list[str]:
@@ -404,15 +428,187 @@ def replace_irrigation_block(lines: list[str], replacement: list[str]) -> list[s
     return lines[:start] + new_block + lines[end:]
 
 
+def _find_next_section_start(lines: list[str], start: int) -> int:
+    for index in range(start + 1, len(lines)):
+        if lines[index].startswith("*"):
+            return index
+    return len(lines)
+
+
 def replace_fertilizer_block(lines: list[str], replacement: list[str]) -> list[str]:
     start = next(index for index, line in enumerate(lines) if line.startswith("*FERTILIZERS"))
-    end = next(
-        index
-        for index in range(start + 1, len(lines))
-        if lines[index].startswith("*SIMULATION CONTROLS")
-    )
+    end = _find_next_section_start(lines, start)
     new_block = [lines[start]] + replacement
     return lines[:start] + new_block + lines[end:]
+
+
+def _find_section_bounds(lines: list[str], section_prefix: str, next_prefix: str) -> tuple[int, int]:
+    start = next(index for index, line in enumerate(lines) if line.startswith(section_prefix))
+    end = next(index for index in range(start + 1, len(lines)) if lines[index].startswith(next_prefix))
+    return start, end
+
+
+def _extract_irrigation_templates(section_lines: list[str], treatment_no: int) -> tuple[str | None, list[tuple[str, str]]]:
+    control_line: str | None = None
+    event_templates: list[tuple[str, str]] = []
+    for line in section_lines:
+        parts = line.split()
+        if not parts or not parts[0].isdigit() or int(parts[0]) != treatment_no:
+            continue
+        if len(parts) >= 9 and not (len(parts[1]) == 5 and parts[1].isdigit()):
+            control_line = line
+            continue
+        if len(parts) >= 4 and len(parts[1]) == 5 and parts[1].isdigit():
+            irop = parts[2] if len(parts) >= 3 else "IR001"
+            suffix = ""
+            if len(parts) > 4:
+                suffix = " " + " ".join(parts[4:])
+            event_templates.append((irop, suffix))
+    return control_line, event_templates
+
+
+def _find_irrigation_block_bounds(section_lines: list[str], treatment_no: int) -> tuple[int | None, int | None]:
+    block_start: int | None = None
+    block_end: int | None = None
+    for index, line in enumerate(section_lines):
+        parts = line.split()
+        if not parts or not parts[0].isdigit():
+            continue
+        if len(parts) >= 9 and not (len(parts[1]) == 5 and parts[1].isdigit()):
+            if int(parts[0]) == treatment_no and block_start is None:
+                block_start = index
+                continue
+            if block_start is not None:
+                block_end = index
+                break
+    if block_start is not None and block_end is None:
+        block_end = len(section_lines)
+    return block_start, block_end
+
+
+def _format_irrigation_event_line(
+    treatment_no: int,
+    yyddd: str,
+    irop: str,
+    irrigation_mm: float,
+    suffix: str,
+) -> str:
+    if float(irrigation_mm).is_integer():
+        amount = f"{int(irrigation_mm):d}"
+    else:
+        amount = f"{irrigation_mm:.1f}"
+    return f"{treatment_no:>2} {yyddd} {irop:<5}{amount:>6}{suffix}"
+
+
+def replace_single_treatment_irrigation_block(
+    lines: list[str],
+    treatment_no: int,
+    policy: list[PolicyRow],
+) -> list[str]:
+    start, end = _find_section_bounds(lines, "*IRRIGATION AND WATER MANAGEMENT", "*FERTILIZERS")
+    section_lines = lines[start + 1 : end]
+    control_line, event_templates = _extract_irrigation_templates(section_lines, treatment_no)
+    positive_events = [row for row in policy if row.irrigation_mm > 0.0]
+    if not positive_events:
+        return list(lines)
+    if control_line is None:
+        control_line = f"{treatment_no:>2}   -99   -99   -99   -99   -99   -99     1 IR001"
+    if not event_templates:
+        event_templates = [("IR001", "")]
+
+    block_start, block_end = _find_irrigation_block_bounds(section_lines, treatment_no)
+    date_header = "@I IDATE  IROP IRVAL"
+    if block_start is not None and block_start + 1 < len(section_lines) and section_lines[block_start + 1].startswith("@I IDATE"):
+        date_header = section_lines[block_start + 1]
+
+    rebuilt_block = [control_line, date_header]
+    for index, row in enumerate(positive_events):
+        irop, suffix = event_templates[min(index, len(event_templates) - 1)]
+        rebuilt_block.append(
+            _format_irrigation_event_line(
+                treatment_no,
+                date_to_yyddd(date.fromisoformat(row.date)),
+                irop,
+                row.irrigation_mm,
+                suffix,
+            )
+        )
+
+    if block_start is None or block_end is None:
+        rebuilt_section = list(section_lines)
+        rebuilt_section.extend(rebuilt_block)
+    else:
+        rebuilt_section = section_lines[:block_start] + rebuilt_block + section_lines[block_end:]
+    return lines[: start + 1] + rebuilt_section + lines[end:]
+
+
+def _extract_fertilizer_templates(section_lines: list[str], treatment_no: int) -> list[list[str]]:
+    templates: list[list[str]] = []
+    for line in section_lines:
+        if line.startswith("*"):
+            break
+        parts = line.split()
+        if len(parts) >= 12 and parts[0].isdigit() and int(parts[0]) == treatment_no:
+            templates.append(parts)
+    return templates
+
+
+def _format_fertilizer_event_line(
+    treatment_no: int,
+    yyddd: str,
+    template: list[str],
+    nitrogen_kg_ha: float,
+) -> str:
+    fmcd = template[2] if len(template) > 2 else "FE001"
+    facd = template[3] if len(template) > 3 else "AP001"
+    fdep = template[4] if len(template) > 4 else "10"
+    fername = " ".join(template[11:]) if len(template) > 11 else "TRNSDAT"
+    return (
+        f"{treatment_no:>2} {yyddd} {fmcd:<5} {facd:<5}"
+        f"{fdep:>6}{nitrogen_kg_ha:>6.1f}{0:>6}{0:>6}{0:>6}{0:>6}{'-99':>6} {fername}"
+    )
+
+
+def replace_single_treatment_fertilizer_block(
+    lines: list[str],
+    treatment_no: int,
+    policy: list[PolicyRow],
+) -> list[str]:
+    start, end = _find_section_bounds(lines, "*FERTILIZERS", "*SIMULATION CONTROLS")
+    section_lines = lines[start + 1 : end]
+    templates = _extract_fertilizer_templates(section_lines, treatment_no)
+    positive_events = [row for row in policy if row.nitrogen_kg_ha > 0.0]
+    if not positive_events:
+        return list(lines)
+    if not templates:
+        templates = [[str(treatment_no), "00000", "FE001", "AP001", "10", "0.0", "0", "0", "0", "0", "-99", "TRNSDAT"]]
+
+    header = (
+        section_lines[0]
+        if section_lines and section_lines[0].startswith("@F")
+        else "@F FDATE  FMCD FACD FDEP  FAMN  FAMP  FAMK  FAMC  FAMO FOCD FERNAME"
+    )
+    tail_start = next((index for index, line in enumerate(section_lines[1:], start=1) if line.startswith("*")), len(section_lines))
+    fertilizer_data_lines = section_lines[1:tail_start]
+    preserved_other_lines = [
+        line
+        for line in fertilizer_data_lines
+        if not (line.split() and line.split()[0].isdigit() and int(line.split()[0]) == treatment_no)
+    ]
+    rebuilt = [lines[start], header]
+    for index, row in enumerate(positive_events):
+        template = templates[min(index, len(templates) - 1)]
+        rebuilt.append(
+            _format_fertilizer_event_line(
+                treatment_no,
+                date_to_yyddd(date.fromisoformat(row.date)),
+                template,
+                row.nitrogen_kg_ha,
+            )
+        )
+    rebuilt.extend(preserved_other_lines)
+    rebuilt.extend(section_lines[tail_start:])
+    return lines[:start] + rebuilt + lines[end:]
 
 
 def _rewrite_space_separated_date_line(line: str, new_value: str) -> str:
@@ -435,11 +631,19 @@ def _replace_token_at(line: str, token_index: int, new_value: str) -> str:
     return line
 
 
-def replace_primary_dates(lines: list[str], planting_yyddd: str) -> list[str]:
+def replace_primary_dates(
+    lines: list[str],
+    planting_yyddd: str,
+    *,
+    template_planting_yyddd_override: str = "",
+) -> list[str]:
     updated = list(lines)
     planting_date = yyddd_to_date(planting_yyddd)
-    emergence_yyddd = date_to_yyddd(planting_date - timedelta(days=1))
+    template_planting_yyddd = template_planting_yyddd_override or extract_template_planting_date(lines)
+    template_planting_date = yyddd_to_date(template_planting_yyddd)
+    planting_delta = planting_date - template_planting_date
     last_harvest_yyddd = date_to_yyddd(planting_date + timedelta(days=365))
+    shifted_planting_dates: list[date] = []
 
     section: str | None = None
     for index, line in enumerate(updated):
@@ -447,28 +651,58 @@ def replace_primary_dates(lines: list[str], planting_yyddd: str) -> list[str]:
             section = line
             continue
         if section == "*INITIAL CONDITIONS" and line.strip() and not line.startswith("@") and not line.startswith("!"):
-            updated[index] = _replace_token_at(line, 2, emergence_yyddd)
-            section = None
+            parts = line.split()
+            if len(parts) >= 3 and re.fullmatch(r"\d{5}", parts[2]):
+                original_icdat = yyddd_to_date(parts[2])
+                updated[index] = _replace_token_at(line, 2, date_to_yyddd(original_icdat + planting_delta))
             continue
         if section == "*PLANTING DETAILS" and line.strip() and not line.startswith("@") and not line.startswith("!"):
-            updated[index] = _replace_token_at(line, 1, planting_yyddd)
-            section = None
+            parts = line.split()
+            if len(parts) >= 2 and re.fullmatch(r"\d{5}", parts[1]):
+                original_planting = yyddd_to_date(parts[1])
+                shifted_planting = original_planting + planting_delta
+                shifted_planting_dates.append(shifted_planting)
+                updated[index] = _replace_token_at(line, 1, date_to_yyddd(shifted_planting))
             continue
         if line.startswith("@N PLANTING"):
             continue
         if line.startswith("@N HARVEST"):
             continue
-        if line.strip().startswith("1 PL"):
-            updated[index] = _replace_token_at(line, 2, planting_yyddd)
-            updated[index] = _replace_token_at(updated[index], 3, planting_yyddd)
+        parts = line.split()
+        if len(parts) >= 4 and parts[1] == "PL" and re.fullmatch(r"\d{5}", parts[2]) and re.fullmatch(r"\d{5}", parts[3]):
+            original_first = yyddd_to_date(parts[2])
+            original_last = yyddd_to_date(parts[3])
+            updated[index] = _replace_token_at(line, 2, date_to_yyddd(original_first + planting_delta))
+            updated[index] = _replace_token_at(updated[index], 3, date_to_yyddd(original_last + planting_delta))
             continue
-        if line.strip().startswith("1 HA"):
-            updated[index] = _replace_token_at(line, 2, last_harvest_yyddd)
-            updated[index] = _replace_token_at(updated[index], 3, last_harvest_yyddd)
+        if len(parts) >= 4 and parts[1] == "HA":
+            if re.fullmatch(r"\d{5}", parts[2]):
+                original_first = yyddd_to_date(parts[2])
+                updated[index] = _replace_token_at(line, 2, date_to_yyddd(original_first + planting_delta))
+            elif parts[2] == "0":
+                updated[index] = _replace_token_at(line, 2, parts[2])
+            if re.fullmatch(r"\d{5}", parts[3]):
+                original_last = yyddd_to_date(parts[3])
+                updated[index] = _replace_token_at(updated[index], 3, date_to_yyddd(original_last + planting_delta))
+            else:
+                updated[index] = _replace_token_at(updated[index], 3, last_harvest_yyddd)
             continue
-        if line.strip().startswith("1 GE"):
-            updated[index] = _replace_token_at(line, 5, emergence_yyddd)
+        if len(parts) >= 6 and parts[1] == "GE":
+            if shifted_planting_dates:
+                start_date = min(shifted_planting_dates) - timedelta(days=1)
+            else:
+                start_date = planting_date - timedelta(days=1)
+            updated[index] = _replace_token_at(line, 5, date_to_yyddd(start_date))
             continue
+        if section == "*HARVEST DETAILS" and line.strip() and not line.startswith("@") and not line.startswith("!"):
+            parts = line.split()
+            if len(parts) >= 2 and re.fullmatch(r"\d{5}", parts[1]):
+                original_harvest = yyddd_to_date(parts[1])
+                updated[index] = _replace_token_at(
+                    line,
+                    1,
+                    date_to_yyddd(original_harvest + planting_delta),
+                )
     return updated
 
 
@@ -502,16 +736,30 @@ def main() -> int:
         cultivar_file = materialize_cultivar_file(run_dir, cultivar_override)
         lines = replace_cultivar_block(lines, cultivar_override)
     treatment_ids = extract_treatment_ids(lines)
+    active_treatment_no = infer_active_treatment_no(scenario_payload)
+    template_planting_yyddd = (
+        extract_treatment_planting_date(lines, active_treatment_no)
+        if active_treatment_no > 0
+        else extract_template_planting_date(lines)
+    )
     planting_yyddd = resolve_scenario_planting_yyddd(
         scenario_payload,
-        extract_template_planting_date(lines),
+        template_planting_yyddd,
     )
-    lines = replace_primary_dates(lines, planting_yyddd)
+    lines = replace_primary_dates(
+        lines,
+        planting_yyddd,
+        template_planting_yyddd_override=template_planting_yyddd,
+    )
     station_code, latitude, longitude, elevation = extract_field_metadata(lines)
-    irrigation_lines = build_irrigation_lines(policy, planting_yyddd, treatment_ids)
-    fertilizer_lines = build_fertilizer_lines(policy, planting_yyddd, treatment_ids)
-    updated = replace_irrigation_block(lines, irrigation_lines)
-    updated = replace_fertilizer_block(updated, fertilizer_lines)
+    if active_treatment_no > 0 and active_treatment_no in treatment_ids:
+        updated = replace_single_treatment_irrigation_block(lines, active_treatment_no, policy)
+        updated = replace_single_treatment_fertilizer_block(updated, active_treatment_no, policy)
+    else:
+        irrigation_lines = build_irrigation_lines(policy, planting_yyddd, treatment_ids)
+        fertilizer_lines = build_fertilizer_lines(policy, planting_yyddd, treatment_ids)
+        updated = replace_irrigation_block(lines, irrigation_lines)
+        updated = replace_fertilizer_block(updated, fertilizer_lines)
     experiment_path.write_text("\n".join(updated) + "\n", encoding="utf-8")
     weather_file = build_weather_file(
         run_dir=run_dir,

@@ -6,6 +6,7 @@ from math import floor
 from typing import Any
 
 from transdssat.discrete_actions import ActionConstraintSnapshot, ContinuousAction
+from transdssat.discrete_actions import default_action_constraint_rules
 from transdssat.domain import CropAction, Trajectory, TrajectoryStep
 from transdssat.environments import StepwiseDecisionEnvironment
 from transdssat.scenarios import STAGES, SimulationScenario, stage_for_day
@@ -430,7 +431,7 @@ def _event_plan_to_day_weights(
 
 
 def _allowed_input_stages(scenario: SimulationScenario, input_name: str) -> tuple[str, ...]:
-    constraints = StepwiseDecisionEnvironment(scenario).constraint_rules
+    constraints = default_action_constraint_rules(scenario)
     if input_name == "irrigation":
         return tuple(constraints.allowed_irrigation_stages)
     if input_name == "nitrogen":

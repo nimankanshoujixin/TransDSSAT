@@ -100,7 +100,7 @@ class StepwiseEnvironmentTests(unittest.TestCase):
         )
         self.assertEqual(len(context.cultivar.parameter_vector), 11)
 
-    def test_nitrogen_gap_constraints_block_followup_actions(self) -> None:
+    def test_default_constraints_do_not_apply_gap_or_stage_heuristics(self) -> None:
         scenario = copy.deepcopy(self.scenario)
         scenario.soil_profile.initial_root_zone_water_mm = scenario.soil_profile.field_capacity_mm - 30.0
         for day in scenario.weather[:6]:
@@ -116,11 +116,11 @@ class StepwiseEnvironmentTests(unittest.TestCase):
         self.assertGreater(reward, -1e9)
         self.assertFalse(done)
         self.assertEqual(info["discrete_action_id"], 6)
-        self.assertFalse(observation.action_constraints.nitrogen.allowed)
-        self.assertIn("minimum_gap_active", observation.action_constraints.nitrogen.blocked_reasons)
-        self.assertNotIn(4, observation.discrete_action_mask.legal_action_ids)
-        self.assertNotIn(5, observation.discrete_action_mask.legal_action_ids)
-        self.assertNotIn(6, observation.discrete_action_mask.legal_action_ids)
+        self.assertTrue(observation.action_constraints.nitrogen.allowed)
+        self.assertEqual(observation.action_constraints.nitrogen.blocked_reasons, [])
+        self.assertIn(4, observation.discrete_action_mask.legal_action_ids)
+        self.assertIn(5, observation.discrete_action_mask.legal_action_ids)
+        self.assertIn(6, observation.discrete_action_mask.legal_action_ids)
         self.assertGreaterEqual(observation.action_constraints.irrigation.max_value, 0.0)
         self.assertLess(info["remaining_nitrogen_kg_ha"], self.scenario.nitrogen_budget_kg_ha)
 
@@ -361,7 +361,7 @@ class StepwiseEnvironmentTests(unittest.TestCase):
         self.assertIn("total_nitrogen_leached_kg_ha", profit_episode.final_outcome.environmental_metrics)
         self.assertIn("terminal_soil_nitrogen_kg_ha", water_episode.final_outcome.environmental_metrics)
 
-    def test_heuristic_v2_keeps_illegal_irrigation_budget_as_pending_carryover(self) -> None:
+    def test_heuristic_v2_is_not_clipped_by_wet_soil_heuristic(self) -> None:
         scenario = copy.deepcopy(self.scenario)
         scenario.soil_profile.initial_root_zone_water_mm = scenario.soil_profile.field_capacity_mm + 15.0
         policy = build_heuristic_stepwise_policy(scenario)
@@ -371,8 +371,8 @@ class StepwiseEnvironmentTests(unittest.TestCase):
         action = policy.decide(observation)
 
         self.assertEqual(policy.summary().policy_kind, "reactive_heuristic_stepwise_policy")
-        self.assertEqual(action.irrigation_mm, 0.0)
-        self.assertGreater(getattr(policy, "pending_irrigation_mm", 0.0), 0.0)
+        self.assertGreaterEqual(action.irrigation_mm, 0.0)
+        self.assertEqual(getattr(policy, "pending_irrigation_mm", 0.0), 0.0)
 
     def test_reward_contract_switch_changes_reward_but_not_proxy_dynamics(self) -> None:
         reward_v1_scenario = copy.deepcopy(self.scenario)

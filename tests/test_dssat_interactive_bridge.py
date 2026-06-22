@@ -180,6 +180,114 @@ class InteractiveBridgeHelperTests(unittest.TestCase):
             self.assertEqual(action_payload["nitrogen_kg_ha"], "18.0")
             self.assertEqual(action_payload["close_requested"], "0")
 
+    def test_await_action_returns_close_when_final_outcome_already_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            protocol_dir = root / "protocol"
+            protocol_dir.mkdir(parents=True, exist_ok=True)
+            manifest_path = protocol_dir / "session_manifest.json"
+            manifest_path.write_text(json.dumps(_manifest(protocol_dir), indent=2), encoding="utf-8")
+            (protocol_dir / "final_outcome.json").write_text(
+                json.dumps(
+                    {
+                        "yield_kg_ha": 7100.0,
+                        "biomass_kg_ha": 15100.0,
+                        "total_irrigation_mm": 12.0,
+                        "total_nitrogen_kg_ha": 18.0,
+                        "water_use_efficiency": 1.3,
+                        "nitrogen_use_efficiency": 0.9,
+                        "cumulative_reward": 4.2,
+                        "environmental_metrics": {},
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            action_path = root / "action.kv"
+
+            helper_main(
+                [
+                    "await-action",
+                    "--protocol-dir",
+                    str(protocol_dir),
+                    "--session-manifest",
+                    str(manifest_path),
+                    "--step-index",
+                    "19",
+                    "--output-action-file",
+                    str(action_path),
+                    "--timeout-seconds",
+                    "2",
+                    "--poll-interval-seconds",
+                    "0.02",
+                ]
+            )
+
+            action_payload = dict(
+                line.strip().split("=", 1)
+                for line in action_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            )
+            self.assertEqual(action_payload["step_index"], "19")
+            self.assertEqual(action_payload["close_requested"], "1")
+
+    def test_await_action_returns_close_when_progress_already_has_final_outcome(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            protocol_dir = root / "protocol"
+            protocol_dir.mkdir(parents=True, exist_ok=True)
+            manifest_path = protocol_dir / "session_manifest.json"
+            manifest_path.write_text(json.dumps(_manifest(protocol_dir), indent=2), encoding="utf-8")
+            (protocol_dir / "interactive_progress.json").write_text(
+                json.dumps(
+                    {
+                        "scenario_id": "test-scenario",
+                        "run_dir": str(root / "run"),
+                        "last_state": {"day_index": 92},
+                        "cumulative_reward": -3.6,
+                        "final_outcome": {
+                            "yield_kg_ha": 1850.0,
+                            "biomass_kg_ha": 9556.0,
+                            "total_irrigation_mm": 65.0,
+                            "total_nitrogen_kg_ha": 173.0,
+                            "water_use_efficiency": 0.0,
+                            "nitrogen_use_efficiency": 0.0,
+                            "cumulative_reward": -3.604963,
+                            "environmental_metrics": {},
+                        },
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            action_path = root / "action.kv"
+
+            helper_main(
+                [
+                    "await-action",
+                    "--protocol-dir",
+                    str(protocol_dir),
+                    "--session-manifest",
+                    str(manifest_path),
+                    "--step-index",
+                    "20",
+                    "--output-action-file",
+                    str(action_path),
+                    "--timeout-seconds",
+                    "2",
+                    "--poll-interval-seconds",
+                    "0.02",
+                ]
+            )
+
+            action_payload = dict(
+                line.strip().split("=", 1)
+                for line in action_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            )
+            self.assertEqual(action_payload["step_index"], "20")
+            self.assertEqual(action_payload["close_requested"], "1")
+
     def test_write_step_response_supports_json_daily_trace_and_final_outcome(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

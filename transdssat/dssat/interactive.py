@@ -7,7 +7,7 @@ import subprocess
 import time
 from typing import Any, Protocol
 
-from transdssat.dssat.config import DSSATRunConfig
+from transdssat.dssat.config import DSSATRunConfig, split_command
 from transdssat.dssat.inputs import DSSATInputBuilder
 from transdssat.domain import CropAction, CropOutcome, CropState
 from transdssat.scenarios import SimulationScenario
@@ -16,6 +16,7 @@ from transdssat.season import SeasonPolicy
 INTERACTIVE_PROTOCOL_VERSION = "patched-dssat-v1"
 INTERACTIVE_ACTION_CHANNELS = ("irrigation_mm", "nitrogen_kg_ha")
 INTERACTIVE_CONTROLLER_SCRIPT_PATH = Path(__file__).resolve().parents[2] / "scripts" / "run_interactive_dssat_controller.py"
+PROJECT_ROOT = INTERACTIVE_CONTROLLER_SCRIPT_PATH.parents[1]
 
 
 @dataclass(slots=True)
@@ -199,6 +200,7 @@ class FileSystemInteractiveDSSATTransport:
         self.run_dir = run_dir
         self.process: subprocess.Popen[str] | None = None
         self.current_step_index = 0
+        self._last_cumulative_reward = 0.0
         self.controller_log_path = self.run_dir / self.controller.log_filename
         self._controller_log_handle: Any | None = None
 
@@ -223,6 +225,8 @@ class FileSystemInteractiveDSSATTransport:
             manifest,
         )
         self.process = self._launch_controller()
+        self.current_step_index = 0
+        self._last_cumulative_reward = 0.0
         payload = self._wait_for_json(
             self.protocol.session_ready_path,
             timeout_seconds=self.controller.ready_timeout_seconds,
@@ -255,12 +259,19 @@ class FileSystemInteractiveDSSATTransport:
             timeout_seconds=self.controller.step_timeout_seconds,
             timeout_label=f"interactive step response {self.current_step_index}",
         )
-        self.current_step_index += 1
         final_outcome_payload = payload.get("final_outcome")
+        done = bool(payload.get("done", False))
+        if done:
+            self._finalize_terminal_session(expect_final_outcome_file=final_outcome_payload is None)
+        self.current_step_index += 1
+        if final_outcome_payload is not None:
+            self._last_cumulative_reward = float(final_outcome_payload.get("cumulative_reward", self._last_cumulative_reward))
+        else:
+            self._last_cumulative_reward = round(self._last_cumulative_reward + float(payload.get("reward", 0.0)), 6)
         return InteractiveDSSATStepResult(
             next_state=_state_from_payload(payload["next_state"]),
             reward=float(payload.get("reward", 0.0)),
-            done=bool(payload.get("done", False)),
+            done=done,
             daily_trace=list(payload.get("daily_trace", [])),
             final_outcome=None if final_outcome_payload is None else _outcome_from_payload(final_outcome_payload),
             run_dir=str(payload.get("run_dir", self.run_dir)),
@@ -278,6 +289,7 @@ class FileSystemInteractiveDSSATTransport:
             timeout_label="interactive final outcome",
         )
         self._cleanup_process()
+        self._last_cumulative_reward = float(payload.get("cumulative_reward", self._last_cumulative_reward))
         return _outcome_from_payload(payload) if payload else None
 
     def _launch_controller(self) -> subprocess.Popen[str]:
@@ -331,6 +343,9 @@ class FileSystemInteractiveDSSATTransport:
                 except json.JSONDecodeError:
                     pass
             if self.process is not None and self.process.poll() is not None:
+                recovered = self._recover_terminal_payload(path)
+                if recovered is not None:
+                    return recovered
                 detail = self._controller_log_summary()
                 raise RuntimeError(
                     f"Interactive DSSAT controller exited before producing {timeout_label}. "
@@ -350,6 +365,105 @@ class FileSystemInteractiveDSSATTransport:
             return f"Controller log path: {self.controller_log_path} (empty)."
         tail = " | ".join(lines[-10:])
         return f"Controller log path: {self.controller_log_path}. Tail: {tail}"
+
+    def _finalize_terminal_session(self, *, expect_final_outcome_file: bool) -> None:
+        if expect_final_outcome_file and not self.protocol.final_outcome_path.exists():
+            try:
+                self._wait_for_json(
+                    self.protocol.final_outcome_path,
+                    timeout_seconds=self.controller.close_timeout_seconds,
+                    timeout_label="interactive final outcome",
+                )
+            except TimeoutError:
+                pass
+        if self.process is not None:
+            terminal_wait_seconds = max(self.controller.close_timeout_seconds, 300.0)
+            try:
+                self.process.wait(timeout=terminal_wait_seconds)
+            except subprocess.TimeoutExpired:
+                pass
+            if self.process.poll() is not None:
+                self._cleanup_process()
+
+    def _recover_terminal_payload(self, expected_path: Path) -> dict[str, Any] | None:
+        if expected_path.name == self.protocol.final_outcome_path.name and expected_path.exists():
+            try:
+                return json.loads(expected_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                return None
+        if not expected_path.name.startswith("step_response_"):
+            return None
+        if not self.protocol.final_outcome_path.exists():
+            return None
+        try:
+            final_outcome_payload = json.loads(self.protocol.final_outcome_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return None
+        progress_payload = self._load_progress_payload()
+        next_state_payload = dict(progress_payload.get("last_state", {}))
+        if not next_state_payload:
+            next_state_payload = self._load_state_payload_from_run_dir()
+        if not next_state_payload:
+            return None
+        run_dir = str(progress_payload.get("run_dir", self.run_dir))
+        reward = round(
+            float(final_outcome_payload.get("cumulative_reward", self._last_cumulative_reward))
+            - self._last_cumulative_reward,
+            6,
+        )
+        recovered_payload = {
+            "next_state": next_state_payload,
+            "reward": reward,
+            "done": True,
+            "daily_trace": [],
+            "final_outcome": final_outcome_payload,
+            "run_dir": run_dir,
+            "info": {
+                "backend_mode": "interactive_patched",
+                "terminal_response_recovered": True,
+                "recovery_source": "final_outcome_fallback",
+            },
+        }
+        _write_json_atomic(expected_path, recovered_payload)
+        return recovered_payload
+
+    def _load_progress_payload(self) -> dict[str, Any]:
+        progress_path = self.protocol.root_dir / "interactive_progress.json"
+        if not progress_path.exists():
+            return {}
+        try:
+            return json.loads(progress_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return {}
+
+    def _load_state_payload_from_run_dir(self) -> dict[str, Any]:
+        state_path = self.run_dir / "transdssat_interactive_state.kv"
+        if not state_path.exists():
+            return {}
+        payload: dict[str, Any] = {}
+        for raw_line in state_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = raw_line.strip()
+            if not line or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            payload[key.strip()] = value.strip()
+        required_fields = {
+            "day_index",
+            "stage",
+            "stage_index",
+            "soil_moisture",
+            "root_zone_water_mm",
+            "soil_nitrogen_kg_ha",
+            "canopy_cover",
+            "biomass_kg_ha",
+            "water_stress",
+            "nitrogen_stress",
+            "tmean_c",
+            "precipitation_mm",
+            "et0_mm",
+            "radiation_mj_m2",
+        }
+        return payload if required_fields.issubset(payload) else {}
 
 
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
@@ -411,6 +525,7 @@ def build_filesystem_interactive_transport_from_env(
             actions=[],
         ),
     )
+    _run_interactive_preprocess_if_configured(config, context)
     protocol = FileSystemInteractiveProtocol(
         root_dir=context.run_dir / config.interactive_protocol_dirname,
     )
@@ -427,3 +542,36 @@ def build_filesystem_interactive_transport_from_env(
         controller=controller,
         run_dir=context.run_dir,
     )
+
+
+def _run_interactive_preprocess_if_configured(config: DSSATRunConfig, context) -> None:
+    if not config.preprocess_command:
+        return
+    stdout_path = context.run_dir / "transdssat_stdout.log"
+    stderr_path = context.run_dir / "transdssat_stderr.log"
+    command = config.preprocess_command.format(
+        run_dir=str(context.run_dir),
+        manifest=str(context.manifest_path),
+        policy=str(context.policy_path),
+        scenario=str(context.scenario_path),
+        crop=context.crop_name,
+        experiment=context.experiment_file,
+    )
+    argv = split_command(command)
+    if not argv:
+        raise RuntimeError("Interactive DSSAT preprocess command resolved to an empty command.")
+    with stdout_path.open("a", encoding="utf-8") as stdout_handle:
+        with stderr_path.open("a", encoding="utf-8") as stderr_handle:
+            result = subprocess.run(
+                argv,
+                cwd=PROJECT_ROOT,
+                stdout=stdout_handle,
+                stderr=stderr_handle,
+                check=False,
+                timeout=config.timeout_seconds,
+            )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Interactive DSSAT preprocess command failed with exit code {result.returncode}. "
+            f"See {stdout_path} and {stderr_path}."
+        )

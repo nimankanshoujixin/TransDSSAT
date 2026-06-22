@@ -85,6 +85,7 @@ class ActionConstraintRules:
     max_soil_moisture_for_irrigation: float
     allowed_irrigation_stages: list[str]
     allowed_nitrogen_stages: list[str]
+    ignore_wet_soil_irrigation_block: bool = False
     post_harvest_allows_only_noop: bool = True
     notes: list[str] | None = None
 
@@ -145,16 +146,14 @@ class DiscreteActionMask:
         }
 
 
-_CROP_STAGE_RULES = {
-    "wheat": {
-        "irrigation": ["vegetative", "reproductive"],
-        "nitrogen": ["emergence", "vegetative", "reproductive"],
-    },
-    "maize": {
-        "irrigation": ["emergence", "vegetative", "reproductive"],
-        "nitrogen": ["emergence", "vegetative", "reproductive"],
-    },
-}
+_NON_HEURISTIC_ALLOWED_STAGES = (
+    "preplant",
+    "in_season",
+    "emergence",
+    "vegetative",
+    "reproductive",
+    "grain_fill",
+)
 
 _ACTION_DIMENSIONS = (
     ActionSpaceDimension(
@@ -215,23 +214,21 @@ def default_discrete_action_table(scenario: SimulationScenario | None = None) ->
 
 
 def default_action_constraint_rules(scenario: SimulationScenario | None = None) -> ActionConstraintRules:
-    crop_name = scenario.crop_spec.crop_name if scenario is not None else "maize"
     decision_context = scenario.decision_context if scenario is not None else None
-    stage_rules = _CROP_STAGE_RULES.get(crop_name, _CROP_STAGE_RULES["maize"])
     return ActionConstraintRules(
         decision_interval_days=decision_context.decision_interval_days if decision_context is not None else 5,
-        irrigation_min_gap_days=decision_context.irrigation_min_gap_days if decision_context is not None else 5,
-        nitrogen_min_gap_days=decision_context.nitrogen_min_gap_days if decision_context is not None else 10,
-        max_soil_moisture_for_irrigation=0.95,
-        allowed_irrigation_stages=list(stage_rules["irrigation"]),
-        allowed_nitrogen_stages=list(stage_rules["nitrogen"]),
+        irrigation_min_gap_days=0,
+        nitrogen_min_gap_days=0,
+        max_soil_moisture_for_irrigation=999.0,
+        allowed_irrigation_stages=list(_NON_HEURISTIC_ALLOWED_STAGES),
+        allowed_nitrogen_stages=list(_NON_HEURISTIC_ALLOWED_STAGES),
+        ignore_wet_soil_irrigation_block=True,
         notes=[
             "budget_limit",
-            "minimum_gap_between_same_input_events",
-            "stage_restriction",
-            "block_irrigation_when_soil_is_already_wet",
-            "continuous_action_bounds_are_state_dependent",
-            "no_operation_only_after_harvest",
+            "nonnegative_numeric_bounds",
+            "joint_action_follows_action_space_config",
+            "heuristic_stage_gap_wetsoil_masks_disabled",
+            "no_new_actions_after_environment_done",
         ],
     )
 
@@ -282,16 +279,19 @@ def action_constraints_for_state(
     last_irrigation_day: int | None,
     last_nitrogen_day: int | None,
     done: bool,
+    constraint_rules: ActionConstraintRules | None = None,
 ) -> ActionConstraintSnapshot:
-    rules = default_action_constraint_rules(scenario)
+    rules = constraint_rules or default_action_constraint_rules(scenario)
     action_space = default_continuous_action_space(scenario)
 
     current_day = state.day_index
     soil_capacity = scenario.soil_profile.field_capacity_mm
-    too_wet = (
-        state.soil_moisture >= rules.max_soil_moisture_for_irrigation
-        or state.root_zone_water_mm >= soil_capacity
-    )
+    too_wet = False
+    if not rules.ignore_wet_soil_irrigation_block:
+        too_wet = (
+            state.soil_moisture >= rules.max_soil_moisture_for_irrigation
+            or state.root_zone_water_mm >= soil_capacity
+        )
 
     irrigation_reasons: list[str] = []
     nitrogen_reasons: list[str] = []
@@ -412,7 +412,7 @@ def action_mask_for_constraints(
         mask=mask,
         legal_action_ids=legal_action_ids,
         notes=[
-            "mask value 1 means the discrete action is currently legal under budget, stage, gap, and wet-soil rules",
+            "mask value 1 means the discrete action is currently legal under budget and numeric bounds",
             "mask is aligned with action ordering emitted in discrete_action_table.actions",
         ],
     )

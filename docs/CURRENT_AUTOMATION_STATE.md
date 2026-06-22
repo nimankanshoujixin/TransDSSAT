@@ -1,13 +1,457 @@
 # Current Automation State
 
 ## Last updated
-2026-06-22 16:02 Asia/Shanghai
+2026-06-23 03:10 Asia/Shanghai
 
 ## Mode
-Completed
+In Progress
 
 ## Task status
-The proxy-to-official DSSAT transition task is complete. Proxy remains deprecated and invalid for future TransDSSAT training and evaluation work. The official-DSSAT-only mainline, copied-runtime interactive patch path, and standard repo-path regression gate have all been verified. The thread is now waiting for a new Bootstrap task.
+The observed-management rice parity follow-up is now complete. The gym-style interactive path has been admitted on the real rice test subset under the real observed water/fertilizer sequence itself, not only under the earlier empty/heuristic baseline path.
+
+## 2026-06-23 03:10 Asia/Shanghai incremental update
+
+- re-read the active task/state, kept fast-resume mode, and completed the pending final rerun instead of reopening already-closed diagnosis branches
+- local validation passed on the now-admitted file set:
+  - `python -m unittest tests.test_dssat_inputs tests.test_dssat_validation tests.test_dssat_interactive tests.test_dssat_interactive_bridge tests.test_render_dssat_inputs tests.test_stepwise_env tests.test_interactive_real_subset_observed_management_parity -v`
+  - `python -m compileall transdssat scripts tests`
+- remote validation passed after syncing the current parity-related files into `/fs/fast/u2021201693/lym/TransDSSAT`:
+  - `conda run --no-capture-output -n transdssat python -m unittest tests.test_stepwise_env tests.test_interactive_real_subset_observed_management_parity -v`
+- completed one clean remote official-DSSAT observed-management parity rerun:
+  - artifact root:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_real_subset_observed_management_parity_wuhu_tr11_20260623_024449`
+  - formal report:
+    - [`/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_real_subset_observed_management_parity_wuhu_tr11_20260623_024449/interactive_real_subset_observed_management_parity_report.json`](/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_real_subset_observed_management_parity_wuhu_tr11_20260623_024449/interactive_real_subset_observed_management_parity_report.json)
+- admitted result:
+  - `status = ok`
+  - `source_policy_matches_reconstructed_interactive_policy = true`
+  - `all_semantic_files_match = true`
+  - `all_outcome_fields_match = true`
+  - `transition_count = 93`
+  - source observed sequence remained the expected 4-event policy:
+    - day 0: irrigation `30.0`, nitrogen `47.2`
+    - day 5: nitrogen `35.9`
+    - day 42: irrigation `35.0`
+    - day 50: nitrogen `35.9`
+- wrote the persistent completion report in:
+  - [`/G:/TransDSSAT/docs/interactive-real-subset-observed-management-parity-2026-06-23-cn.md`](/G:/TransDSSAT/docs/interactive-real-subset-observed-management-parity-2026-06-23-cn.md)
+- updated [`/G:/TransDSSAT/docs/CURRENT_AUTOMATION_TASK.md`](/G:/TransDSSAT/docs/CURRENT_AUTOMATION_TASK.md) from `In Progress` to `Completed`
+- current interpretation:
+  - the real-data rice observed-management equivalence gate is now closed
+  - the mainline step-wise path no longer drops the source observed management sequence before it reaches interactive DSSAT
+  - remaining exact-file diffs are still the known accepted non-semantic differences and do not block admission
+- next immediate action:
+  - commit the admitted implementation and docs, push to GitHub, then return this thread to waiting-for-Bootstrap state
+
+## 2026-06-23 02:18 Asia/Shanghai incremental update
+
+- rechecked the user's latest requirement against the active task book
+- conclusion:
+  - the core validation goal is already aligned:
+    - same real observed-management input
+    - gym-style interactive path reconstructs the same action sequence
+    - patched interactive DSSAT and vanilla DSSAT match on the same input
+  - two finish-condition details were not explicit enough in the task book:
+    - keep advancing until the formal parity gate is actually passed
+    - after completion, commit and submit the admitted result to GitHub
+- updated [`/G:/TransDSSAT/docs/CURRENT_AUTOMATION_TASK.md`](/G:/TransDSSAT/docs/CURRENT_AUTOMATION_TASK.md) to make those two points explicit in:
+  - delivery/finish contract
+  - target deliverables
+  - remaining work
+- current interpretation:
+  - there is no conflict between the user's requirement and the task direction
+  - the task book is now stricter and clearer about end condition and repository submission
+- next immediate action:
+  - continue the clean remote observed-management parity rerun until the formal report passes, then finalize commit/GitHub submission
+
+## 2026-06-23 02:10 Asia/Shanghai incremental update
+
+- user decided that training/evaluation should no longer use TransDSSAT's own agronomy-style hard heuristic masks
+- implemented the requested global default simplification in [`/G:/TransDSSAT/transdssat/discrete_actions.py`](/G:/TransDSSAT/transdssat/discrete_actions.py):
+  - default step-wise legality no longer applies:
+    - stage restriction
+    - same-input minimum-gap blocking
+    - wet-soil irrigation blocking
+  - default legality now keeps only:
+    - non-negative numeric bounds
+    - remaining-budget upper bounds
+    - action-space joint-action setting
+    - no new actions after `environment_done`
+- this means the default step-wise path now lets the model send actions to DSSAT directly and learn from native DSSAT consequences instead of being pre-clipped by TransDSSAT heuristics
+- updated environment-layer regression coverage in [`/G:/TransDSSAT/tests/test_stepwise_env.py`](/G:/TransDSSAT/tests/test_stepwise_env.py):
+  - follow-up nitrogen actions are no longer expected to be blocked by `minimum_gap_active`
+  - saturated-soil cases are no longer expected to trigger wet-soil irrigation carryover clipping
+- local validation passed:
+  - `python -m unittest tests.test_stepwise_env tests.test_interactive_real_subset_observed_management_parity -v`
+  - related `compileall` passed
+- remote validation passed:
+  - `python -m unittest tests.test_stepwise_env tests.test_interactive_real_subset_observed_management_parity -v`
+- current interpretation:
+  - the default TransDSSAT step-wise interface is now much closer to the user's intended contract:
+    - model proposes action
+    - DSSAT consequences determine whether that action was good or bad
+    - TransDSSAT no longer injects its own agronomy hard masks before execution except for budget/numeric legality
+- next immediate action:
+  - rerun the real-rice observed-management formal parity report on a clean interactive session, now under the new global permissive default
+
+## 2026-06-23 01:35 Asia/Shanghai incremental update
+
+- re-read the current task/state and stayed in fast-resume mode on the real rice observed-management parity blocker
+- inspected the actual remote interactive protocol requests and confirmed the previous failure point precisely:
+  - `step_request_0000/0005/0042/0050.json` all contained zero actions
+  - therefore the non-zero observed management sequence was being removed before the patched runtime consumed it
+- narrowed the root cause with a targeted remote probe instead of another full blind rerun:
+  - source schedule was correct:
+    - day 0: irrigation `30.0`, nitrogen `47.2`
+    - day 5: nitrogen `35.9`
+    - day 42: irrigation `35.0`
+    - day 50: nitrogen `35.9`
+  - but `policy.decide(...)` on the interactive path had already clipped these to zero under the generic hard action mask
+  - the decisive blocker was not transport serialization; it was legality clipping:
+    - nitrogen was blocked by `stage_blocked`
+    - irrigation was blocked by `stage_blocked` and `soil_too_wet`
+- found and fixed an additional infrastructure bug that had hidden the intended override path:
+  - [`/G:/TransDSSAT/transdssat/environments/stepwise.py`](/G:/TransDSSAT/transdssat/environments/stepwise.py) was accepting custom `constraint_rules`, but `get_action_constraints()` still called `action_constraints_for_state(...)` without passing them through
+  - [`/G:/TransDSSAT/transdssat/discrete_actions.py`](/G:/TransDSSAT/transdssat/discrete_actions.py) now accepts an optional `constraint_rules` override and actually uses it
+- implemented a dedicated observed-management replay override for this admission-only harness:
+  - [`/G:/TransDSSAT/scripts/run_interactive_real_subset_observed_management_parity.py`](/G:/TransDSSAT/scripts/run_interactive_real_subset_observed_management_parity.py)
+  - for real observed-management replay only, the harness now:
+    - keeps budget and same-input min-gap checks
+    - allows preplant / in-season stage labels used by the real rice route
+    - disables the generic wet-soil irrigation hard block for this source-sequence reconstruction proof
+  - this is deliberately scoped to the observed-management parity harness, not the generic training/evaluation path
+- added stronger diagnostics and regression coverage:
+  - the observed-management report path now records `scheduled_action`, `policy_action`, and `action_constraints` in each transition
+  - [`/G:/TransDSSAT/tests/test_interactive_real_subset_observed_management_parity.py`](/G:/TransDSSAT/tests/test_interactive_real_subset_observed_management_parity.py) now locks:
+    - schedule lookup for the observed-management days
+    - custom replay-rule allowance for preplant actions
+- local validation passed:
+  - `python -m unittest tests.test_interactive_real_subset_observed_management_parity -v`
+  - related `compileall` passed
+- remote targeted validation passed:
+  - `python -m unittest tests.test_interactive_real_subset_observed_management_parity -v`
+- decisive remote debug probe after the override now proves the action path itself can carry the real observed sequence:
+  - day 0:
+    - scheduled `30.0 mm + 47.2 kg/ha`
+    - decided `30.0 mm + 47.2 kg/ha`
+    - executed `30.0 mm + 47.2 kg/ha`
+  - day 5:
+    - scheduled `35.9 kg/ha`
+    - decided `35.9 kg/ha`
+    - executed `35.9 kg/ha`
+- current interpretation:
+  - the previous "all observed actions are zeroed" blocker is now technically resolved on the live interactive path
+  - the remaining work is operational:
+    - rerun the full observed-management parity harness from a clean session/protocol state
+    - regenerate the formal report
+    - confirm `source_policy_matches_reconstructed_interactive_policy = true` while semantic DSSAT parity remains clean
+- next immediate action:
+  - run one clean remote official-DSSAT observed-management parity pass on `wuhu_rice_calibrated-tr11` using the new replay override, then archive the resulting report into the persistent docs if it passes
+
+## 2026-06-23 02:45 Asia/Shanghai incremental update
+
+- published and began a new follow-up task immediately after the user raised the stronger equivalence criterion
+- confirmed the real rice test subset already contains a non-trivial source management sequence through existing code, not just a static experiment file:
+  - [`/G:/TransDSSAT/transdssat/real_subset_replay.py`](/G:/TransDSSAT/transdssat/real_subset_replay.py) parses `wuhu_rice_calibrated-tr11` into:
+    - day 0: irrigation `30.0`, nitrogen `47.2`
+    - day 5: nitrogen `35.9`
+    - day 42: irrigation `35.0`
+    - day 50: nitrogen `35.9`
+- added a dedicated observed-management parity entrypoint:
+  - [`/G:/TransDSSAT/scripts/run_interactive_real_subset_observed_management_parity.py`](/G:/TransDSSAT/scripts/run_interactive_real_subset_observed_management_parity.py)
+  - this path:
+    - switches the real-subset scenario to a daily (`decision_interval_days = 1`) step grid
+    - converts the source management `SeasonPolicy` into a daily stepwise schedule
+    - runs interactive patched DSSAT
+    - reconstructs the interactive action sequence from protocol files
+    - replays the same source management policy on vanilla DSSAT
+    - compares semantic DSSAT outputs plus policy-sequence equality
+- added CPU-safe regression coverage in:
+  - [`/G:/TransDSSAT/tests/test_interactive_real_subset_observed_management_parity.py`](/G:/TransDSSAT/tests/test_interactive_real_subset_observed_management_parity.py)
+  - verified:
+    - observed-management scenarios use daily stepwise execution
+    - stepwise conversion and protocol reconstruction preserve action semantics (`day_index/date/irrigation/nitrogen`)
+- local and remote targeted validation passed:
+  - `python -m unittest tests.test_interactive_real_subset_observed_management_parity -v`
+  - related `compileall` passed
+- first remote official-DSSAT observed-management parity run is now completed and highly informative:
+  - the remote script no longer fails on scenario materialization, vanilla replay input rendering, or semantic output comparison
+  - artifact root:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_real_subset_observed_management_parity_wuhu_tr11_20260623`
+  - current result:
+    - `all_semantic_files_match = true`
+    - `all_outcome_fields_match = true`
+    - but `status = failed`
+- the remaining blocker is sharply narrowed and is now action-path specific:
+  - `source_management_policy` is non-empty
+  - `interactive_stepwise_policy.action_schedule` is non-empty
+  - but `interactive_trace.transitions[*].executed_action` is still `{irrigation_mm: 0.0, nitrogen_kg_ha: 0.0}` for every day
+  - therefore `reconstructed_interactive_policy.actions = []`
+  - this means the interactive patched path is still not consuming the intended observed-management actions on the real-data route, even though DSSAT final outputs remain parity-clean with vanilla under the current path
+- current interpretation:
+  - the new stronger user requirement is now formulated and executable
+  - the remaining gap is no longer DSSAT parity itself; it is action injection fidelity under real observed management replay
+- next immediate action:
+  - trace where the non-zero observed-management actions are being zeroed out between the stepwise schedule, action validation, protocol request files, and patched runtime consumption, then rerun the same observed-management parity artifact until reconstructed actions match the source policy
+
+## 2026-06-23 02:10 Asia/Shanghai incremental update
+
+- continued directly from the rice generalized parity blocker instead of reopening already-closed startup issues
+- fixed the protocol-side terminal overrun in [`/G:/TransDSSAT/transdssat/dssat/interactive_bridge.py`](/G:/TransDSSAT/transdssat/dssat/interactive_bridge.py):
+  - `await-action` now exits cleanly with `close_requested=1` when `final_outcome.json` or `interactive_progress.final_outcome` already exists
+  - this closes the old helper timeout loop on nonexistent `step_request_0019+`
+- added regression coverage in [`/G:/TransDSSAT/tests/test_dssat_interactive_bridge.py`](/G:/TransDSSAT/tests/test_dssat_interactive_bridge.py) for both terminal-outcome signals
+- found and fixed the next replay-side blocker in [`/G:/TransDSSAT/scripts/render_dssat_inputs.py`](/G:/TransDSSAT/scripts/render_dssat_inputs.py):
+  - zero-action replay policies were deleting the active treatment irrigation/fertilizer sections
+  - the renderer now preserves the original management blocks when the reconstructed interactive policy has no positive irrigation or nitrogen events
+- added regression coverage in [`/G:/TransDSSAT/tests/test_render_dssat_inputs.py`](/G:/TransDSSAT/tests/test_render_dssat_inputs.py) for zero-action management preservation
+- narrowed the remaining rice mismatch to parity-classification only, not agronomic divergence:
+  - outcomes already matched exactly
+  - residual exact-file differences were `Summary.OUT` (`CH4EM` text rounding, `OPAM`, `OPTAM`) and `SoilWat.OUT` (`DTWTM`)
+- tightened semantic comparison in [`/G:/TransDSSAT/transdssat/dssat/validation.py`](/G:/TransDSSAT/transdssat/dssat/validation.py):
+  - keep ignoring accepted non-semantic fields
+  - treat `Summary.OUT/CH4EM` as a rounding-only semantic field with integer precision normalization
+- added regression coverage in [`/G:/TransDSSAT/tests/test_dssat_validation.py`](/G:/TransDSSAT/tests/test_dssat_validation.py) for the `CH4EM` rounding case
+- local validation passed:
+  - `python -m unittest tests.test_dssat_interactive_bridge -v`
+  - `python -m unittest tests.test_render_dssat_inputs -v`
+  - `python -m unittest tests.test_dssat_validation -v`
+  - related `compileall` runs passed
+- remote validation passed:
+  - `python -m unittest tests.test_dssat_interactive_bridge -v`
+  - `python -m unittest tests.test_render_dssat_inputs -v`
+  - `python -m unittest tests.test_dssat_validation -v`
+- remote rice full-season parity rerun now admits the generalized path:
+  - artifact:
+    - [`/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_fullseason_parity_rice_real_subset_20260623_0048/interactive_fullseason_parity_report.json`](/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_fullseason_parity_rice_real_subset_20260623_0048/interactive_fullseason_parity_report.json)
+  - result:
+    - `status = ok`
+    - `all_semantic_files_match = true`
+    - `all_outcome_fields_match = true`
+    - `all_files_match = false`
+- current interpretation:
+  - the generalized rice `real_subset` path is now admitted as semantic/agronomic parity evidence
+  - remaining exact-file deltas are the same narrow non-semantic set and do not block parity admission
+- next immediate action:
+  - wait for the next Bootstrap task; if broader external arbitrary-scenario support is required, continue from this admitted rice baseline rather than re-debugging the current rice route
+
+## 2026-06-23 00:15 Asia/Shanghai incremental update
+
+- re-read the current task/state and stayed in fast-resume mode on the rice `real_subset` interactive blocker
+- re-verified the current local mainline code path:
+  - [`/G:/TransDSSAT/scripts/run_interactive_fullseason_parity.py`](/G:/TransDSSAT/scripts/run_interactive_fullseason_parity.py)
+  - [`/G:/TransDSSAT/transdssat/dssat/interactive.py`](/G:/TransDSSAT/transdssat/dssat/interactive.py)
+  - [`/G:/TransDSSAT/transdssat/dssat/interactive_controller.py`](/G:/TransDSSAT/transdssat/dssat/interactive_controller.py)
+  - confirmed the generalized path already tries to use `interactive_patched` plus preprocess-before-launch
+- verified remote GPU availability with `nvidia-smi` per runbook, but did not start any GPU work because the current task remains CPU-safe parity/debug work only
+- ran a focused remote rice-side diagnosis instead of launching unrelated new experiments:
+  - the generalized interactive rice run directory still contained the rendered weather file `EQAH2101.WTH` at the run root and under `Weather/`
+  - however the interactive run never reached `interactive_protocol/session_ready.json`
+  - `ERROR.OUT` showed patched DSSAT exited at startup on the rice batch path before protocol emission
+- narrowed the new root cause away from missing copied weather/soil files and onto batch-mode materialization mismatch:
+  - the generic builder was still carrying the source multi-treatment [`DSSBatch.v48`](/G:/TransDSSAT/transdssat/dssat/inputs.py) into the interactive rice run directory
+  - the admitted real-subset replay path instead rewrites batch mode to the active single treatment before launch
+  - this mismatch explains why the patched interactive rice path still died before `session_ready.json`, even though the required weather file had already been materialized
+- implemented the generic fix in [`/G:/TransDSSAT/transdssat/dssat/inputs.py`](/G:/TransDSSAT/transdssat/dssat/inputs.py):
+  - infer the active treatment from `scenario_id` patterns like `-tr11-`
+  - rewrite `DSSBatch.v48` to a single-treatment batch entry when the scenario is treatment-scoped
+  - keep the generic scenario/template route rather than adding another rice-only replay wrapper
+- added regression coverage in [`/G:/TransDSSAT/tests/test_dssat_inputs.py`](/G:/TransDSSAT/tests/test_dssat_inputs.py):
+  - `test_real_subset_style_scenario_rewrites_batch_to_single_treatment`
+- validation passed locally and remotely:
+  - local:
+    - `python -m unittest tests.test_dssat_inputs -v`
+    - `python -m compileall transdssat/dssat/inputs.py tests/test_dssat_inputs.py`
+  - remote:
+    - `conda run --no-capture-output -n transdssat python -m unittest tests.test_dssat_inputs -v`
+- current interpretation:
+  - the previous “interactive rice emits nothing” symptom is now better explained:
+    - the generalized path was missing the same single-treatment batch contract that the admitted rice replay path depended on
+    - this is a narrower and more actionable blocker than a generic protocol redesign
+  - the next required check is operational rather than architectural:
+    - rerun the remote patched interactive reset/parity path with the new batch override and confirm `interactive_protocol/session_ready.json` now appears
+- next immediate action:
+  - validate the remote rice `interactive_patched` reset path after the new `DSSBatch.v48` override, then rerun the full rice parity harness if reset succeeds
+
+## 2026-06-23 00:45 Asia/Shanghai incremental update
+
+- continued the remote rice `interactive_patched` reset validation instead of broadening scope
+- verified the new generalized single-treatment batch override is actually active on the remote run product:
+  - [`/G:/TransDSSAT/transdssat/dssat/inputs.py`](/G:/TransDSSAT/transdssat/dssat/inputs.py) now writes:
+    - `$BATCH(RICE)`
+    - one `WHRI2101.RIX` row with `TRTNO = 11`
+  - remote run directory confirmed the same single-treatment `DSSBatch.v48`
+- found a second remote drift that had been masking the real blocker:
+  - remote [`/fs/fast/u2021201693/lym/TransDSSAT/transdssat/real_subset_stepwise_eval.py`] still had `engine_name="dssat_proxy"`
+  - that meant earlier `env.reset()` probes were falling back to `ProxyCropEnvironment`, so protocol absence was partly a wrong-backend artifact
+  - after syncing the remote file back to the local mainline behavior (`engine_name="dssat_official"`), the same reset probe now enters `_InteractivePatchedOfficialBackend` as intended
+- remote reset progression is now much more concrete:
+  - `session_manifest.json` is now created under:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/data/dssat_runs/wuhu_rice_calibrated-tr11-real-subset-interactive-session/interactive_protocol`
+  - this proves the file-protocol transport/controller chain now starts on the generalized rice path
+  - the controller still exits before `session_ready.json`
+- current blocker has moved forward from batch/backend setup to DSSAT-side cultivar compatibility:
+  - controller log now ends with patched DSSAT subprocess exit code `99`
+  - `interactive_controller.log` and `ERROR.OUT` show:
+    - `Error in Cultivar entry`
+    - `File: RICER048.CUL`
+    - `Error key: IPVAR`
+  - the interactive rice run directory currently lacks a usable root-level or `Genotype/` `RICER048.CUL`, so the generalized interactive path is not yet materializing the cultivar file the same way the admitted vanilla/replay rice path expects
+- current interpretation:
+  - the previous blocker is closed:
+    - generalized rice reset no longer dies because of wrong backend selection or multi-treatment batch materialization
+  - the new narrow blocker is:
+    - align rice cultivar file materialization / compatibility rewriting for the interactive generalized path so patched DSSAT can pass `IPVAR` and reach `session_ready.json`
+- next immediate action:
+  - compare the interactive rice run directory against the already-admitted vanilla/replay rice materialization contract, then patch generic cultivar-file emission so `RICER048.CUL` is present and compatible before the next reset retry
+
+## 2026-06-23 01:05 Asia/Shanghai incremental update
+
+- completed the next remote reset admission step on the generalized rice path instead of stopping at static reasoning
+- identified one operational false blocker during the first retry:
+  - the reset wrapper had not exported `DSSAT_PATCHED_HOME` / `DSSAT_HOME`
+  - so the generalized builder was not copying `RICER048.CUL` from the patched runtime into the run directory
+  - after correcting the runtime env exports, the rice interactive reset advanced materially
+- remote `interactive_patched` rice reset now passes the previous gate:
+  - backend is `_InteractivePatchedOfficialBackend`
+  - protocol directory now exists
+  - protocol files now include:
+    - `session_manifest.json`
+    - `session_ready.json`
+    - `interactive_progress.json`
+- this closes the earlier blocker that the generalized rice path could not reach `session_ready.json`
+- immediately advanced to the next end-to-end check by launching the remote full-season rice parity harness through:
+  - [`/G:/TransDSSAT/scripts/run_interactive_fullseason_parity.py`](/G:/TransDSSAT/scripts/run_interactive_fullseason_parity.py)
+- that parity run now fails at a later stage than reset:
+  - before the interactive episode loop starts, heuristic policy construction calls `_allowed_input_stages(...)`
+  - that helper currently instantiates a plain `StepwiseDecisionEnvironment(scenario)` and therefore triggers the season-replay official backend pre-evaluation path
+  - on this rice real-subset route, that pre-evaluation run fails with `IPFERT`
+- concrete new blocker:
+  - remote run directory:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/data/dssat_runs/wuhu_rice_calibrated-tr11-real-subset-official-stepwise`
+  - `ERROR.OUT` now shows:
+    - `Fertilizer input section not found`
+    - `File: WHRI2101.RIX`
+    - `Error key: IPFERT`
+  - this is no longer an interactive transport/controller failure
+  - it is now a rice official-stepwise/pre-evaluation materialization issue triggered indirectly by heuristic-policy setup
+- current interpretation:
+  - generalized rice interactive reset is now admitted
+  - the next blocker is inside the parity harness bootstrap path:
+    - either make heuristic stage-constraint discovery avoid season-replay DSSAT execution
+    - or make the official-stepwise rice pre-evaluation path materialize a fertilizer section acceptable to DSSAT under zero-policy startup
+- next immediate action:
+  - patch the heuristic/constraint bootstrap or official-stepwise rice materialization so the parity harness can get past `IPFERT`, then rerun the same rice full-season parity command
+
+## 2026-06-22 22:35 Asia/Shanghai incremental update
+
+- clarified the active direction with the user:
+  - this is no longer a maize-only or `gym-dssat`-style hard-coded harness task
+  - the target is an official-DSSAT mainline that can accept arbitrary crops and arbitrary scenarios through reusable scenario/runtime contracts
+- fixed the first rice-specific structural blocker in [`/G:/TransDSSAT/scripts/render_dssat_inputs.py`](/G:/TransDSSAT/scripts/render_dssat_inputs.py):
+  - `replace_fertilizer_block(...)` no longer assumes `*SIMULATION CONTROLS` immediately follows `*FERTILIZERS`
+  - this preserves rice-style `*HARVEST DETAILS` sections instead of dropping them
+  - `replace_primary_dates(...)` now also shifts `*HARVEST DETAILS` `HDATE` rows by planting-date delta rather than only handling maize-style `@N HARVEST` records
+- added regression coverage in [`/G:/TransDSSAT/tests/test_render_dssat_inputs.py`](/G:/TransDSSAT/tests/test_render_dssat_inputs.py) for:
+  - preserving `*HARVEST DETAILS` when fertilizer blocks are replaced
+  - shifting rice harvest dates under planting-date changes
+- validation passed locally and remotely:
+  - `python -m unittest tests.test_render_dssat_inputs tests.test_scenario_sources tests.test_dssat_inputs tests.test_dssat_validation -v`
+  - `python -m compileall scripts/render_dssat_inputs.py tests/test_render_dssat_inputs.py`
+  - `conda run --no-capture-output -n transdssat python -m unittest tests.test_render_dssat_inputs tests.test_scenario_sources tests.test_dssat_inputs tests.test_dssat_validation -v`
+- reran the remote rice real-subset full-season parity harness after the render fix:
+  - artifact root:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_fullseason_parity_rice_real_subset_fix_20260622_2235`
+  - result:
+    - the previous `IPHAR` failure is gone, proving the harvest-section bug is closed
+    - the new blocker is now `IPSOIL` on vanilla DSSAT:
+      - soil profile `CNWH000001` not found in `/fs/fast/u2021201693/lym/dssat-runtime/Soil/CN.SOL`
+- current interpretation:
+  - the generic scenario-source path is functioning for rice far enough to render and launch the official DSSAT path
+  - the next missing generic contract is runtime asset materialization for non-`quzhou` sources:
+    - rice real-subset replay previously depended on copied soil/genotype/standard-data assets
+    - the current generic builder only copies template files plus TransDSSAT policy/weather/scenario payloads
+- next immediate action:
+  - generalize the runtime-asset copy/materialization contract so rice real-subset scenarios bring along the required soil catalog/profile assets before the next remote parity rerun
+
+## 2026-06-22 23:45 Asia/Shanghai incremental update
+
+- continued the rice-side generic official-DSSAT path instead of adding another crop-specific branch
+- generalized runtime asset materialization in [`/G:/TransDSSAT/transdssat/dssat/inputs.py`](/G:/TransDSSAT/transdssat/dssat/inputs.py):
+  - copy default runtime `Weather/Soil/Genotype/StandardData` assets from `runtime_root`
+  - overlay adjacent scenario-source assets from nested template roots such as rice `real_subset` source trees
+  - apply rice `RICER048_WHRI_APPEND.CUL` merge and `WHR006 -> WHR009` compatibility rewrite for the Wuhu real-subset path
+- extended regression coverage in:
+  - [`/G:/TransDSSAT/tests/test_dssat_inputs.py`](/G:/TransDSSAT/tests/test_dssat_inputs.py)
+  - [`/G:/TransDSSAT/tests/test_render_dssat_inputs.py`](/G:/TransDSSAT/tests/test_render_dssat_inputs.py)
+- generalized [`/G:/TransDSSAT/scripts/render_dssat_inputs.py`](/G:/TransDSSAT/scripts/render_dssat_inputs.py) further for multi-treatment rice experiments:
+  - preserve `*HARVEST DETAILS`
+  - shift multi-treatment planting / initial / harvest dates with the active treatment as the planting anchor
+  - keep simulation start date before the earliest shifted planting
+  - replace irrigation/fertilizer only for the active treatment instead of overwriting all treatments
+- local and remote test status:
+  - local:
+    - `python -m unittest tests.test_render_dssat_inputs tests.test_dssat_inputs -v`
+    - `python -m compileall scripts/render_dssat_inputs.py transdssat/dssat/inputs.py`
+  - remote:
+    - `conda run --no-capture-output -n transdssat python -m unittest tests.test_render_dssat_inputs tests.test_dssat_inputs -v`
+- remote rice parity progression is now clearly staged:
+  1. `IPHAR` fixed
+  2. `IPSOIL` fixed
+  3. `IPVAR` fixed
+  4. multi-treatment `LAND` / `IPIRR` date-schedule conflicts fixed on the vanilla path
+  5. vanilla replay now runs to completion and emits `PlantGro.OUT` / `Summary.OUT` / `Evaluate.OUT`
+- current blocker has moved to the interactive side only:
+  - parity run `interactive_fullseason_parity_rice_real_subset_fix9_20260622_2344` now fails because the interactive run directory under:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/data/dssat_runs/wuhu_rice_calibrated-tr11-real-subset-interactive-session`
+    does not produce `interactive_protocol/`, `PlantGro.OUT`, or season outputs at all
+  - parser failure is therefore downstream of a missing interactive launch/handshake, not a new vanilla DSSAT incompatibility
+- next immediate action:
+  - inspect and repair the rice `real_subset` interactive launch path so the patched runtime actually creates protocol/session outputs, then rerun the same rice full-season parity harness
+
+## 2026-06-22 21:04 Asia/Shanghai follow-up task bootstrap
+
+- user explicitly requested:
+  - extend parity support to rice
+  - preferably generalize it toward arbitrary DSSAT-supported crops and arbitrary scenarios
+  - remove hard binding to weather/soil/crop/management presets when the official DSSAT path itself is scenario-driven
+- current code audit confirms the real binding point is not the interactive protocol itself, but the scenario-entry contract:
+  - [`/G:/TransDSSAT/scripts/run_interactive_fullseason_parity.py`](/G:/TransDSSAT/scripts/run_interactive_fullseason_parity.py) still materializes scenarios only through `build_quzhou_scenarios(...)`
+  - [`/G:/TransDSSAT/scripts/smoke_interactive_dssat_session.py`](/G:/TransDSSAT/scripts/smoke_interactive_dssat_session.py) does the same
+  - [`/G:/TransDSSAT/transdssat/dssat/inputs.py`](/G:/TransDSSAT/transdssat/dssat/inputs.py) still biases template lookup toward `crop_quzhou_base`
+- remote template inventory currently contains only:
+  - `/fs/fast/u2021201693/lym/dssat-templates/maize_quzhou_base`
+  - `/fs/fast/u2021201693/lym/dssat-templates/wheat_quzhou_base`
+- therefore the correct next step is:
+  - first generalize the scenario/template contract
+  - then use that generic path to admit rice via real-subset or external scenario JSON
+  - only after that claim progress toward arbitrary DSSAT-supported crops
+
+## 2026-06-22 21:04 Asia/Shanghai incremental update
+
+- implemented treatment/run-aligned parity comparison in [`/G:/TransDSSAT/transdssat/dssat/validation.py`](/G:/TransDSSAT/transdssat/dssat/validation.py)
+- added regression coverage in [`/G:/TransDSSAT/tests/test_dssat_validation.py`](/G:/TransDSSAT/tests/test_dssat_validation.py) for:
+  - right-side treatment filtering
+  - `*RUN` section filtering on daily output files
+- local validation passed:
+  - `python -m unittest tests.test_dssat_validation -v`
+  - `python -m compileall transdssat/dssat/validation.py tests/test_dssat_validation.py scripts/run_interactive_fullseason_parity.py`
+- remote validation passed:
+  - `conda run --no-capture-output -n transdssat python -m unittest tests.test_dssat_validation -v`
+- reran the previously failing second maize parity case on the remote server:
+  - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_fullseason_parity_20260622_maize_idx1_treatmentfilter_20260622_205913/interactive_fullseason_parity_report.json`
+  - `status = ok`
+  - `active_output_selector = {"selector_kind": "treatment", "selector_value": 1}`
+  - `all_semantic_files_match = true`
+  - `all_outcome_fields_match = true`
+  - `interactive_trace.termination.mode = "normal"`
+- accepted remaining exact-file differences:
+  - `Summary.OUT`: `CH4EM`, `OPAM`, `OPTAM`
+  - `SoilWat.OUT`: `DTWTM`
+- wrote persistent result documentation:
+  - [`/G:/TransDSSAT/docs/interactive-fullseason-parity-maize-result-2026-06-22-cn.md`](/G:/TransDSSAT/docs/interactive-fullseason-parity-maize-result-2026-06-22-cn.md)
+- next action:
+  - wait for a new `Bootstrap` task; if parity needs broader crop coverage, treat it as a new task rather than continuing this completed one
 
 ## What was verified this wakeup
 
@@ -512,9 +956,40 @@ The proxy-to-official DSSAT transition task is complete. Proxy remains deprecate
 
 ## Next immediate action
 
-1. Fold the validated helper / validator updates into the remote mainline path so future patched-runtime smokes do not require a temporary `/tmp` Python overlay.
-2. Decide whether the current warning-backed short-season termination in the paired smoke is acceptable for the next regression stage or whether the smoke scenario/close path must be tightened first.
-3. After the remote mainline sync is admissible, rerun the same paired validation through the normal repo path to prove both step-scale correctness and final-outcome correctness without overlay assistance.
+1. Record the restored remote artifact as the current admission signal: semantic parity is closed and transport-level protocol completion is normal on the stable mainline.
+2. Preserve the current transport-recovery contract as the default termination path and avoid reviving the rejected native-terminal-step experiment without a new flush-safe design.
+3. If the next wakeup continues this task, broaden the same parity gate to more scenarios so the remaining exact-file deltas can be checked for stability.
+
+- 2026-06-22 19:24 Asia/Shanghai incremental update:
+  - explicitly tested and then rejected the copied-runtime `native final step` design as a current mainline candidate
+  - remote native-step experiment confirmed the failure mode is not agronomic mismatch but premature season termination visibility:
+    - outcome fields still matched vanilla
+    - but `Summary.OUT`, `PlantGro.OUT`, `SoilWat.OUT`, `SoilNi.OUT`, and `Evaluate.OUT` could be truncated because the runtime exposed `done=true` before all seasonal outputs had fully flushed
+  - reverted [`/G:/TransDSSAT/dssat_patch_overlay/CSM_Main/LAND.for`](/G:/TransDSSAT/dssat_patch_overlay/CSM_Main/LAND.for) back to the stable season-end behavior:
+    - keep natural-season `final_outcome.json`
+    - do not force a native terminal `step_response_XXXX.json` before output flush completes
+  - refined [`/G:/TransDSSAT/transdssat/dssat/interactive.py`](/G:/TransDSSAT/transdssat/dssat/interactive.py) so terminal finalize no longer requires an extra standalone `final_outcome.json` wait when the terminal `step_response` already contains `final_outcome`
+  - local validation passed:
+    - `python -m unittest tests.test_dssat_interactive tests.test_dssat_validation -v`
+    - `python -m compileall transdssat/dssat/interactive.py tests/test_dssat_interactive.py tests/test_dssat_validation.py`
+  - synced the reverted `LAND.for` plus updated `interactive.py` to the remote repo path and rebuilt the copied patched runtime remotely
+  - the first restore wrapper run exposed two operational issues and both were resolved:
+    - `Text file busy` came from a stale patched-runtime `dscsm048` process left by the failed run
+    - one wrapper script used Windows CRLF and polluted the parity output-root path with `\r`
+  - after clearing the stale runtime process and rerunning parity through a LF-clean remote wrapper, the restored stable mainline report is:
+    - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_fullseason_parity_20260622_maize_transportrecover_restored2/interactive_fullseason_parity_report.json`
+  - restored result:
+    - `status = ok`
+    - `all_semantic_files_match = true`
+    - `all_outcome_fields_match = true`
+    - `all_files_match = false`
+    - `interactive_trace.termination.mode = "normal"`
+    - `transition_count = 151`
+  - current interpretation:
+    - the stable mainline contract is again the transport-recovery path, not native terminal-step emission
+    - the remaining exact-file differences remain the same narrow non-semantic set:
+      - `Summary.OUT`: `CH4EM`, `OPAM`, `OPTAM`
+      - `SoilWat.OUT`: `DTWTM`
 
 - 2026-06-22 13:16 Asia/Shanghai incremental update:
   - diagnosed the `session_ready.json` regression to a rebuild-input mistake rather than a new launcher or Fortran state bug:
@@ -621,3 +1096,171 @@ The proxy-to-official DSSAT transition task is complete. Proxy remains deprecate
   - tightened [README.md](/G:/TransDSSAT/README.md) and [.gitignore](/G:/TransDSSAT/.gitignore) so the mainline repo scope now explicitly distinguishes tracked integration code from untracked local DSSAT/raw-data/reference assets
   - committed the current mainline snapshot as `a103b23` (`Switch mainline to official DSSAT interactive runtime`)
   - current task remains `Completed`; next action is still to wait for a new `Bootstrap` assignment
+- 2026-06-22 16:34 Asia/Shanghai incremental update:
+  - user clarified an additional validation requirement: not just action/protocol correctness, but full-season parity between `interactive patched DSSAT` and `vanilla DSSAT` under an equivalent action schedule
+  - audited the existing validation chain and confirmed the current evidence stops short of that claim:
+    - `20-case all_cases_match=true` only covers `vanilla` vs copied pre-interactive runtime replay parity
+    - current interactive artifacts only prove protocol alignment and action-scale correctness on short interactive smokes
+    - they do **not** yet prove full-season `interactive patched` vs `vanilla` parity on the same action sequence
+  - added first-pass tooling toward that missing layer:
+    - [`/G:/TransDSSAT/scripts/compare_interactive_session_to_vanilla.py`](/G:/TransDSSAT/scripts/compare_interactive_session_to_vanilla.py)
+    - [`/G:/TransDSSAT/tests/test_dssat_validation.py`](/G:/TransDSSAT/tests/test_dssat_validation.py)
+    - [`/G:/TransDSSAT/transdssat/dssat/validation.py`](/G:/TransDSSAT/transdssat/dssat/validation.py)
+  - remote probe confirmed the current short-session smoke artifacts are not a valid oracle for that parity check because they close early and therefore cannot be compared directly against a full-season vanilla replay
+  - next admissible step is a dedicated server-side full-season interactive replay, then vanilla replay of the reconstructed equivalent policy, followed by file/outcome parity comparison
+- 2026-06-22 17:02 Asia/Shanghai incremental update:
+  - implemented and server-ran a first full-season parity harness:
+    - [`/G:/TransDSSAT/scripts/run_interactive_fullseason_parity.py`](/G:/TransDSSAT/scripts/run_interactive_fullseason_parity.py)
+  - the run reached a decisive diagnosis instead of parity:
+    - artifact root:
+      - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_fullseason_parity_20260622_maize_retry`
+    - current result: `status = failed`
+  - key finding 1: the interactive patched runtime still has an end-of-season protocol gap
+    - controller exited before producing `step_response_0156.json`
+    - no `final_outcome.json` was emitted
+    - however DSSAT season outputs were already present, so the harness could continue by parsing the finished run directory directly
+  - key finding 2: the larger blocker is scenario-binding mismatch, not small numeric drift
+    - interactive patched output stayed on template/weather identity `UFGA8201`, harvest year `1982`
+    - vanilla replay for the reconstructed equivalent policy used the intended rendered scenario year `2025`
+    - representative mismatch:
+      - interactive `yield_kg_ha = 602.0`
+      - vanilla `yield_kg_ha = 1623.0`
+    - interactive trace also showed `156` noop decisions and reconstructed `SeasonPolicy.actions = []`, confirming the current heuristic never triggered while the patched runtime advanced on a different season baseline
+  - current interpretation:
+    - the requested full-season parity check is now genuinely attempted
+    - it currently fails for a concrete reason: `interactive patched DSSAT` is not yet consuming the exact same rendered scenario/weather/season binding as the vanilla replay path
+    - therefore parity is still unproven, but the next fix target is now sharply narrowed to the patched-runtime scenario/preprocess binding plus final handshake completion
+  - next immediate action:
+    - inspect why the patched interactive runtime is still anchored to the stock `UFGA8201` 1982 template season instead of the rendered 2025 scenario, then rerun the same full-season parity harness
+- 2026-06-22 17:35 Asia/Shanghai incremental update:
+  - fixed the interactive patched launch path so it now executes the configured preprocess step before the DSSAT subprocess starts:
+    - [`/G:/TransDSSAT/transdssat/dssat/interactive.py`](/G:/TransDSSAT/transdssat/dssat/interactive.py)
+  - reran the remote full-season parity harness after that fix and confirmed the scenario-binding blocker is closed:
+    - artifact root:
+      - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_fullseason_parity_20260622_maize_preprocessfix`
+    - interactive and vanilla now both use the intended rendered `2025` season
+  - current parity result has improved from agronomic mismatch to file-level tail differences only:
+    - `interactive_outcome.yield_kg_ha = 1623.0`
+    - `vanilla_outcome.yield_kg_ha = 1623.0`
+    - `interactive_outcome.biomass_kg_ha = 3391.0`
+    - `vanilla_outcome.biomass_kg_ha = 3391.0`
+    - irrigation, nitrogen, terminal water, and terminal soil nitrogen also match
+  - `PlantGro.OUT` and `Evaluate.OUT` now match on the parity artifact
+  - the remaining file-level differences are narrowly localized and currently look non-semantic:
+    - `Summary.OUT`:
+      - `CH4EM` formatting only: `0.0` vs `0.000`
+      - `NI#M`: `0` vs `1`
+      - `OPAM` / `OPTAM`: `0` vs `-99`
+    - `SoilWat.OUT`:
+      - vanilla-only `DTWTM=1000` column
+    - `SoilNi.OUT`:
+      - `NI#M`: `0` vs `1`
+  - updated the Python validation layer to start distinguishing exact file equality from semantic file equality:
+    - [`/G:/TransDSSAT/transdssat/dssat/validation.py`](/G:/TransDSSAT/transdssat/dssat/validation.py)
+    - [`/G:/TransDSSAT/scripts/run_interactive_fullseason_parity.py`](/G:/TransDSSAT/scripts/run_interactive_fullseason_parity.py)
+    - [`/G:/TransDSSAT/tests/test_dssat_validation.py`](/G:/TransDSSAT/tests/test_dssat_validation.py)
+  - one protocol issue remains open independently of outcome parity:
+    - the controller/runtime path can still exit at season end before writing the last `step_response_XXXX.json` and `final_outcome.json`
+    - the parity harness currently tolerates this by parsing the finished DSSAT run directory directly
+  - next immediate action:
+    - rerun the parity report with the new semantic-file classification and decide whether the season-end handshake fix is the last remaining blocker
+- 2026-06-22 18:05 Asia/Shanghai incremental update:
+  - synced the semantic-comparison updates to the remote repo path:
+    - `transdssat/dssat/validation.py`
+    - `scripts/run_interactive_fullseason_parity.py`
+    - `tests/test_dssat_validation.py`
+  - verified the remote repo copy with:
+    - `conda run --no-capture-output -n transdssat python -m unittest tests.test_dssat_validation -v`
+    - `conda run --no-capture-output -n transdssat python -m compileall transdssat/dssat/validation.py scripts/run_interactive_fullseason_parity.py tests/test_dssat_validation.py`
+  - reran the full-season parity harness on the remote server:
+    - artifact root:
+      - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_fullseason_parity_20260622_maize_semantic`
+    - report:
+      - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_fullseason_parity_20260622_maize_semantic/interactive_fullseason_parity_report.json`
+  - current result:
+    - `status = ok`
+    - `all_semantic_files_match = true`
+    - `all_outcome_fields_match = true`
+    - `all_files_match = false`
+  - current interpretation:
+    - the full-season parity gate is now closed at the semantic/agronomic level for this maize scenario on `2026-06-22`
+    - the remaining exact-file differences are still the same narrow set of known non-semantic fields:
+      - `Summary.OUT`: `CH4EM`, `NI#M`, `OPAM`, `OPTAM`
+      - `SoilWat.OUT`: `DTWTM`
+      - `SoilNi.OUT`: `NI#M`
+    - the last unresolved blocker has shifted fully to protocol completeness:
+      - the controller still exited before writing the final `step_response_0150.json`
+      - termination mode in the report remains `controller_exit_with_dssat_outputs`
+  - next immediate action:
+    - inspect and fix the season-end controller/runtime handshake so parity no longer depends on fallback parsing of the completed DSSAT run directory
+- 2026-06-22 18:22 Asia/Shanghai incremental update:
+  - patched the copied-runtime natural season-end path in:
+    - [`/G:/TransDSSAT/dssat_patch_overlay/CSM_Main/LAND.for`](/G:/TransDSSAT/dssat_patch_overlay/CSM_Main/LAND.for)
+  - the new behavior is:
+    - at `SEASEND`, if interactive mode is on and a terminal decision window is still open, the runtime attempts to emit a final `done=true` step response
+    - regardless of `close_request`, the runtime now writes `final_outcome.json` on natural season end through the helper path
+  - rebuilt the copied patched runtime remotely:
+    - build artifact:
+      - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/patched_runtime_build_seasonend_20260622_1808/build_report.json`
+  - found that this Fortran-side change closes only part of the original protocol gap:
+    - `final_outcome.json` is now present on natural season end
+    - but `step_response_0150.json` still may be absent
+  - patched the Python transport in:
+    - [`/G:/TransDSSAT/transdssat/dssat/interactive.py`](/G:/TransDSSAT/transdssat/dssat/interactive.py)
+  - the transport now:
+    - tracks cumulative reward across interactive steps
+    - if the controller exits while waiting for a terminal `step_response_XXXX.json`, but `final_outcome.json` already exists, it synthesizes the missing terminal response from:
+      - `final_outcome.json`
+      - `interactive_progress.json`
+      - and, if needed, `transdssat_interactive_state.kv`
+    - writes that recovered terminal response back into the protocol directory
+  - added and passed local plus remote regression coverage for that recovery path:
+    - [`/G:/TransDSSAT/tests/test_dssat_interactive.py`](/G:/TransDSSAT/tests/test_dssat_interactive.py)
+  - reran the remote full-season parity harness again:
+    - artifact root:
+      - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_fullseason_parity_20260622_maize_transportrecover`
+    - report:
+      - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_fullseason_parity_20260622_maize_transportrecover/interactive_fullseason_parity_report.json`
+  - current result:
+    - `status = ok`
+    - `all_semantic_files_match = true`
+    - `all_outcome_fields_match = true`
+    - `interactive_trace.termination.mode = "normal"`
+    - `transition_count = 151`
+  - current interpretation:
+    - the previous season-end crash path is now closed at the practical transport/protocol level
+    - the final transition is present and marked `done = true`
+    - the remaining nuance is architectural, not blocking:
+      - the last terminal step currently comes from transport-side recovery rather than a natively emitted runtime `step_response_0150.json`
+  - next immediate action:
+    - decide whether to accept this transport-level recovery as the mainline contract or continue tightening the copied DSSAT runtime so it writes the final step response natively before exit
+- 2026-06-22 17:48 Asia/Shanghai follow-up update:
+  - revalidated the current parity-comparison unit layer on the remote repo path:
+    - `conda run --no-capture-output -n transdssat python -m unittest tests.test_dssat_validation -v`
+  - attempted to extend the same parity harness to `--crop rice` and confirmed the present script boundary is still maize-specific:
+    - `scripts/run_interactive_fullseason_parity.py` currently routes through `build_quzhou_scenarios(...)`
+    - the current failure mode is `KeyError: 'rice'`, so this is a harness-scope gap rather than a DSSAT parity result
+  - ran an additional remote full-season parity check on the second maize scenario:
+    - artifact:
+      - `/fs/fast/u2021201693/lym/TransDSSAT/artifacts/interactive_fullseason_parity_20260622_maize_idx1_20260622175240/interactive_fullseason_parity_report.json`
+  - the new report is important because it failed for a different reason than the first maize scenario:
+    - `all_outcome_fields_match = true`
+    - `interactive_trace.termination.mode = "normal"`
+    - `transition_count = 26`
+    - but `all_semantic_files_match = false`
+  - narrowed that failure away from agronomic mismatch and onto comparison scope:
+    - interactive output only carried the active treatment rows
+    - vanilla replay output still carried multiple treatment rows from the rendered experiment
+    - representative row-count gaps:
+      - `Summary.OUT`: `1` vs `6`
+      - `Evaluate.OUT`: `1` vs `6`
+      - `PlantGro.OUT`: `149` vs `776`
+      - `SoilWat.OUT`: `153` vs `788`
+      - `SoilNi.OUT`: `153` vs `788`
+  - documented both the rejected `native final step` branch and this new multi-treatment comparison-scope blocker in:
+    - [`/G:/TransDSSAT/docs/interactive-fullseason-parity-followup-2026-06-22-cn.md`](/G:/TransDSSAT/docs/interactive-fullseason-parity-followup-2026-06-22-cn.md)
+  - current interpretation:
+    - the first maize parity artifact remains the accepted semantic baseline
+    - the next blocker is now the evaluation harness itself: parity comparison must be aligned to the same active run/treatment before additional scenario evidence is admissible
+  - next immediate action:
+    - add active-treatment filtering to the parity comparison path, then rerun the failing second maize scenario before attempting broader crop coverage

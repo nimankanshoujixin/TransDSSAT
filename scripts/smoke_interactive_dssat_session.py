@@ -13,7 +13,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from transdssat.domain import CropAction
 from transdssat.dssat import build_filesystem_interactive_transport_from_env
-from transdssat.scenarios import build_quzhou_scenarios
+from transdssat.scenario_sources import resolve_scenario
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -24,7 +24,13 @@ def build_parser() -> argparse.ArgumentParser:
         )
     )
     parser.add_argument("--crop", default="maize", choices=("maize", "rice"))
+    parser.add_argument("--scenario-source", default="quzhou", choices=("quzhou", "real_subset", "json"))
     parser.add_argument("--seed", type=int, default=20260622)
+    parser.add_argument("--scenario-index", type=int, default=0)
+    parser.add_argument("--sampling-mode", default="random", choices=("random", "grid"))
+    parser.add_argument("--scenario-json", default="")
+    parser.add_argument("--subset-id", default="")
+    parser.add_argument("--treatment-no", type=int, default=0)
     parser.add_argument("--decision-interval-days", type=int, default=5)
     parser.add_argument("--irrigation-mm", type=float, default=0.0)
     parser.add_argument("--nitrogen-kg-ha", type=float, default=0.0)
@@ -52,13 +58,16 @@ def main() -> int:
         irrigation_mm=args.irrigation_mm,
         nitrogen_kg_ha=args.nitrogen_kg_ha,
     )
-    scenario = build_quzhou_scenarios(
-        target_count=1,
-        engines=("dssat_official",),
-        crops_filter=(args.crop,),
-        sampling_mode="random",
+    scenario = resolve_scenario(
+        source=args.scenario_source,
+        crop=args.crop,
         seed=args.seed,
-    )[0]
+        scenario_index=args.scenario_index,
+        sampling_mode=args.sampling_mode,
+        scenario_json=args.scenario_json or None,
+        subset_id=args.subset_id,
+        treatment_no=args.treatment_no,
+    )
     transport = build_filesystem_interactive_transport_from_env(scenario, runtime_role="patched")
     report: dict[str, object] = {
         "scenario_id": scenario.scenario_id,

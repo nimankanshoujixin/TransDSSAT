@@ -559,7 +559,17 @@ C     Call end of season and summary output subroutines
 C-----------------------------------------------------------------------
       CALL OPSUM (CONTROL, ISWITCH, YRPLT)
 
-      IF (TDINT_ON .AND. TDINT_CLOSE) THEN
+      IF (TDINT_ON) THEN
+        IF (.NOT. TDINT_CLOSE .AND.
+     &      (TDINT_DAYS_DONE .GT. 0 .OR. TDINT_DEC .GT. 0)) THEN
+          CALL TDINT_WRITE_STEP_RESPONSE(TDINT_HELPER, CONTROL % DAS,
+     &      MDATE, SOILPROP, SW, NH4_plant, NO3_plant, WEATHER,
+     &      XLAI, PSTRES1, NSTRES, EOP, TDINT_STEP, TDINT_DAYS_DONE,
+     &      .TRUE.)
+          TDINT_STEP = TDINT_STEP + 1
+          TDINT_DEC = 0
+          TDINT_DAYS_DONE = 0
+        ENDIF
         CALL TDINT_WRITE_CLOSE_OUTCOME(TDINT_HELPER)
       ENDIF
 

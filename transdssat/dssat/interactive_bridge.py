@@ -197,6 +197,34 @@ def _save_progress(protocol_dir: Path, payload: dict[str, Any]) -> None:
     _write_json(_progress_path(protocol_dir), payload)
 
 
+def _write_close_action_file(output_path: Path, step_index: int) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        "\n".join(
+            [
+                f"step_index={step_index}",
+                "decision_interval_days=0",
+                "irrigation_mm=0.0",
+                "nitrogen_kg_ha=0.0",
+                "close_requested=1",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def _protocol_has_terminal_outcome(protocol_dir: Path) -> bool:
+    final_outcome_path = protocol_dir / "final_outcome.json"
+    if final_outcome_path.exists():
+        return True
+    try:
+        progress = _load_progress(protocol_dir)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(progress.get("final_outcome"), dict)
+
+
 def _build_info_block(interaction: dict[str, Any], *, days_executed: int | None = None, extra: dict[str, Any] | None = None) -> dict[str, Any]:
     info = {
         "protocol_version": interaction["protocol_version"],
@@ -331,20 +359,10 @@ def command_await_action(args: argparse.Namespace) -> int:
     deadline = time.monotonic() + float(args.timeout_seconds)
     while time.monotonic() < deadline:
         if (protocol_dir / "close_request.json").exists():
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(
-                "\n".join(
-                    [
-                        f"step_index={step_index}",
-                        "decision_interval_days=0",
-                        "irrigation_mm=0.0",
-                        "nitrogen_kg_ha=0.0",
-                        "close_requested=1",
-                    ]
-                )
-                + "\n",
-                encoding="utf-8",
-            )
+            _write_close_action_file(output_path, step_index)
+            return 0
+        if _protocol_has_terminal_outcome(protocol_dir):
+            _write_close_action_file(output_path, step_index)
             return 0
         if request_path.exists():
             payload = json.loads(request_path.read_text(encoding="utf-8"))

@@ -151,6 +151,7 @@ class StepwiseDecisionEnvironment:
             last_irrigation_day=self.last_irrigation_day,
             last_nitrogen_day=self.last_nitrogen_day,
             done=self.done,
+            constraint_rules=self.constraint_rules,
         )
 
     def step(self, action: ContinuousAction | dict[str, Any]) -> tuple[DecisionObservation, float, bool, dict[str, Any]]:

@@ -145,6 +145,132 @@ class RenderDSSATInputsTests(unittest.TestCase):
             self.assertIn(" 340.9 1.610 700.0 600.0 10.500 60.00", written)
             self.assertEqual(updated_lines[6], " 1 MZ DH6051 DENGHAI605")
 
+    def test_replace_fertilizer_block_preserves_harvest_details_section(self) -> None:
+        lines = [
+            "*FERTILIZERS (INORGANIC)",
+            "@F FDATE  FMCD FACD FDEP  FAMN  FAMP  FAMK  FAMC  FAMO FOCD FERNAME",
+            " 1 21185 FE005 AP001    5  47.2   0.0   0.0   0.0   0.0 -99  N_FERT",
+            "",
+            "*HARVEST DETAILS",
+            "@H HDATE  HSTG  HCOM HSIZE   HPC  HBPC HNAME",
+            " 1 21309 GS000   -99   -99   -99   -99 HARV_11",
+            "",
+            "*SIMULATION CONTROLS",
+            "@N GENERAL     NYERS NREPS START SDATE RSEED SNAME.................... SMODEL",
+        ]
+
+        updated = render.replace_fertilizer_block(
+            lines,
+            [
+                "@F FDATE  FMCD  FACD  FDEP  FAMN  FAMP  FAMK  FAMC  FAMO  FOCD FERNAME",
+                " 1 21190 FE001 AP001    10  11.9     0     0     0     0   -99 TRNSDAT",
+            ],
+        )
+
+        self.assertIn("*HARVEST DETAILS", updated)
+        harvest_index = updated.index("*HARVEST DETAILS")
+        self.assertEqual(updated[harvest_index + 2], " 1 21309 GS000   -99   -99   -99   -99 HARV_11")
+
+    def test_replace_primary_dates_shifts_harvest_details_dates_by_planting_delta(self) -> None:
+        lines = [
+            "*PLANTING DETAILS",
+            "@P PDATE EDATE  PPOP  PPOE  PLME  PLDS  PLRS  PLRD  PLDP  PLWT  PAGE  PENV  PLPH  SPRL                        PLNAME",
+            " 1 21185   -99    30    30     T     H    25     0     3     0    30    25     1     0                        TRANSPLANT",
+            "",
+            "*HARVEST DETAILS",
+            "@H HDATE  HSTG  HCOM HSIZE   HPC  HBPC HNAME",
+            " 1 21309 GS000   -99   -99   -99   -99 HARV_11",
+            " 2 21312 GS000   -99   -99   -99   -99 HARV_12",
+        ]
+
+        updated = render.replace_primary_dates(lines, "21200")
+
+        self.assertEqual(updated[2].split()[1], "21200")
+        self.assertEqual(updated[6].split()[1], "21324")
+        self.assertEqual(updated[7].split()[1], "21327")
+
+    def test_replace_primary_dates_keeps_multi_treatment_start_before_earliest_planting(self) -> None:
+        lines = [
+            "@N GENERAL     NYERS NREPS START SDATE RSEED SNAME.................... SMODEL",
+            " 1 GE              1     1     S 21184  2150 WUHU_RICE_2021          RICE",
+            "*INITIAL CONDITIONS",
+            "@C   PCR ICDAT  ICRT  ICND  ICRN  ICRE  ICWD ICRES ICREN ICREP ICRIP ICRID ICNAME",
+            " 1    WH 21150   500   -99     1     1   -99     0     0     0   100    15 INIT_01",
+            " 2    WH 21151   500   -99     1     1   -99     0     0     0   100    15 INIT_02",
+            "*PLANTING DETAILS",
+            "@P PDATE EDATE  PPOP  PPOE  PLME  PLDS  PLRS  PLRD  PLDP  PLWT  PAGE  PENV  PLPH  SPRL                        PLNAME",
+            " 1 21151   -99    30    30     T     H    30     0     3     0    30    25     1     0                        TRANSPLANT",
+            " 2 21152   -99    30    30     T     H    30     0     3     0    30    25     1     0                        TRANSPLANT",
+        ]
+
+        updated = render.replace_primary_dates(lines, "21185")
+
+        self.assertEqual(updated[1].split()[5], "21184")
+        self.assertEqual(updated[4].split()[2], "21184")
+        self.assertEqual(updated[5].split()[2], "21185")
+        self.assertEqual(updated[8].split()[1], "21185")
+        self.assertEqual(updated[9].split()[1], "21186")
+
+    def test_single_treatment_policy_replacement_preserves_other_treatments(self) -> None:
+        lines = [
+            "*IRRIGATION AND WATER MANAGEMENT",
+            "@I  EFIR  IDEP  ITHR  IEPT  IOFF  IAME  IAMT IRNAME",
+            " 1     1   -99   -99   -99   -99   -99     2 WATER_01",
+            "@I IDATE  IROP IRVAL",
+            " 1 21151 IR003    30",
+            " 2     1   -99   -99   -99   -99   -99     2 WATER_02",
+            "@I IDATE  IROP IRVAL",
+            " 2 21152 IR003    30",
+            "*FERTILIZERS (INORGANIC)",
+            "@F FDATE  FMCD FACD FDEP  FAMN  FAMP  FAMK  FAMC  FAMO FOCD FERNAME",
+            " 1 21151 FE005 AP001    5 127.0   0.0   0.0   0.0   0.0 -99  N_FERT",
+            " 2 21152 FE005 AP001    5 135.1   0.0   0.0   0.0   0.0 -99  N_FERT",
+            "*SIMULATION CONTROLS",
+        ]
+        policy = [
+            render.PolicyRow(stage="event_01", date="2021-07-04", day_index=0, irrigation_mm=8.8, nitrogen_kg_ha=11.9),
+            render.PolicyRow(stage="event_02", date="2021-07-14", day_index=10, irrigation_mm=4.7, nitrogen_kg_ha=7.5),
+        ]
+
+        updated = render.replace_single_treatment_irrigation_block(lines, 1, policy)
+        updated = render.replace_single_treatment_fertilizer_block(updated, 1, policy)
+        text = "\n".join(updated)
+
+        self.assertIn(" 1 21185 IR003   8.8", text)
+        self.assertIn(" 1 21195 IR003   4.7", text)
+        self.assertIn(" 2 21152 IR003    30", text)
+        self.assertIn(" 1 21185 FE005 AP001     5  11.9", text)
+        self.assertIn(" 1 21195 FE005 AP001     5   7.5", text)
+        self.assertIn(" 2 21152 FE005 AP001    5 135.1", text)
+
+    def test_single_treatment_zero_action_policy_keeps_original_management_blocks(self) -> None:
+        lines = [
+            "*IRRIGATION AND WATER MANAGEMENT",
+            "@I  EFIR  IDEP  ITHR  IEPT  IOFF  IAME  IAMT IRNAME",
+            "11     1   -99   -99   -99   -99   -99     2 WATER_11",
+            "@I IDATE  IROP IRVAL",
+            "11 21185 IR003    30",
+            "*FERTILIZERS (INORGANIC)",
+            "@F FDATE  FMCD FACD FDEP  FAMN  FAMP  FAMK  FAMC  FAMO FOCD FERNAME",
+            "11 21185 FE005 AP001    5 127.0   0.0   0.0   0.0   0.0 -99  N_FERT",
+            "*SIMULATION CONTROLS",
+        ]
+
+        updated = render.replace_single_treatment_irrigation_block(lines, 11, [])
+        updated = render.replace_single_treatment_fertilizer_block(updated, 11, [])
+
+        self.assertEqual(updated, lines)
+
+    def test_extract_treatment_planting_date_returns_requested_treatment(self) -> None:
+        lines = [
+            "*PLANTING DETAILS",
+            "@P PDATE EDATE  PPOP  PPOE  PLME  PLDS  PLRS  PLRD  PLDP  PLWT  PAGE  PENV  PLPH  SPRL                        PLNAME",
+            " 1 21151   -99    30    30     T     H    30     0     3     0    30    25     1     0                        TRANSPLANT",
+            "11 21185   -99    28    28     T     H    25     0     3     0    30    25     1     0                        TRANSPLANT",
+        ]
+
+        self.assertEqual(render.extract_treatment_planting_date(lines, 11), "21185")
+
 
 if __name__ == "__main__":
     unittest.main()
